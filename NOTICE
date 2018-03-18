@@ -1,0 +1,10 @@
+ZNC-Signal, copyright (C) 2018 Jane Soko <boynamedjane@misled.ml>
+
+
+This project includes code from:
+
+- jeepney <https://gitlab.com/takluyver/jeepney>, MIT License
+
+- ZNC <https://znc.in>, Apache 2.0 License
+
+- Python <https://github.com/python/cpython/tree/master/Lib>, PSF License
