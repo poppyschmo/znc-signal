@@ -4,7 +4,7 @@
 - A [dedicated Signal number](#getting-a-number) for this account alone
 - [ZNC][] 1.6.6+ with modpython (preferably running in a Docker container)
 - Python 3.6+
-- [signal-cli][] 0.5.6 (Dockerfile included, 0.6.0 support coming soon)
+- [signal-cli][] 0.6.0 (Dockerfile included)
 - [jeepney][] (included)
 
 
@@ -214,18 +214,17 @@ The following aren't so much disclaimers as admissions of shortcomings.
 Move these points to individual issues threads (and somehow translate current
 ordering/priority):
 
-1. Update signal-cli build to 0.6.0;
-2. Integrate signal-cli 0.6.0 features
+1. Integrate signal-cli 0.6.0 features
    1. Employ receipt subscription and acknowledgment
    2. Queue undelivered messages
    3. Alert attached clients or save to context buffers when backlogs arise;
       in debug mode, just dump
-3. Prepare a TCP/Unix-domain-socket shim for the signal-cli container in case
+2. Prepare a TCP/Unix-domain-socket shim for the signal-cli container in case
    some future release of D-Bus drops TCP support entirely.
-4. Find some means of testing against real ZNC and signal-cli instances to
+3. Find some means of testing against real ZNC and signal-cli instances to
    stay abreast of recent developments. Perhaps a move to GitLab would make
    this easier. Although ZNC, Signal, and signal-cli are all on GitHub.
-5. Either implement or remove the various "placeholder" config options
+4. Either implement or remove the various "placeholder" config options
    stolen early on from [ZNC Push](https://wiki.znc.in/Push). These are all
    currently ignored:
    1. `/templates/*/length`
@@ -233,12 +232,12 @@ ordering/priority):
    3. `/conditions/*/timeout_post`
    4. `/conditions/*/timeout_push`
    5. `/conditions/*/timeout_idle`
-6. Prepare for `getGroupIds()` in subsequent signal-cli release.
-7. Drop support for sub-1.7 ZNC versions at some target date or with the next
+5. Prepare for `getGroupIds()` in subsequent signal-cli release.
+6. Drop support for sub-1.7 ZNC versions at some target date or with the next
    minor ZNC release.
-8. Possibly convert [`/docker/entrypoint.bash`](docker/entrypoint.bash) to a
+7. Possibly convert [`/docker/entrypoint.bash`](docker/entrypoint.bash) to a
    POSIX shell script. Thought Alpine's D-Bus required bash, but it doesn't.
-9. Add bootstrapped deployment examples in the form of DSL files for various
+8. Add bootstrapped deployment examples in the form of DSL files for various
    orchestration ecosystems.
 
 
