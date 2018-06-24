@@ -991,7 +991,8 @@ class Signal(znc.Module):
                              "focus": None}
         session = self._session
         request = incoming.message
-        raw_out = None
+        target = None
+        body = None
         #
         connected = {n.GetName(): n for n in self.networks if
                      n.IsIRCConnected()}
@@ -1027,6 +1028,7 @@ class Signal(znc.Module):
                 else:
                     retort.append("Focus not set")
             else:
+                # FIXME use FindChan here instead
                 if (focus.startswith("#") and session["network"]
                         and focus not in [c.GetName() for c in
                                           session["network"].GetChans()]):
@@ -1036,19 +1038,18 @@ class Signal(znc.Module):
                 session["focus"] = focus
                 retort.append(f"Focus set to {session['focus']!r}")
         elif request.startswith("/msg"):
-            raw_out = request.replace("/msg", "", 1).strip()
+            tarbod = request.replace("/msg", "", 1).strip()
             try:
-                target, body = raw_out.split(None, 1)
+                target, body = tarbod.split(None, 1)
             except ValueError:
                 retort.append("Unable to determine /msg <target>")
-                raw_out = None
-            else:
-                raw_out = "PRIVMSG {} :{}".format(target, body)
+                target = body = None
         elif request.startswith("/help"):
             retort += ["Available commands:",
                        " /net, /focus, /msg"]
         elif not request.startswith("/") and session["focus"] is not None:
-            raw_out = "PRIVMSG {} :{}".format(session["focus"], request)
+            target = session["focus"]
+            body = request
         elif not retort:
             if request.split()[0] in ("/tail", "/snooze"):
                 retort.append("Sorry, coming soon")
@@ -1060,11 +1061,35 @@ class Signal(znc.Module):
             payload = ("\n".join(retort), [], incoming.source)
             self.do_send("Signal", "sendMessage", cb, payload)
             return
-        if raw_out is not None:
+        if target and body is not None:
+            session["network"].PutIRC(f"PRIVMSG {target} :{body}")
             source = self.expand_string("%nick%")
-            # TODO add lines to ZNC buffers for context, if possible
-            self.put_pretty(f":{source} {raw_out}", where="PutClient")
-            session["network"].PutIRC(raw_out)
+            if self.get_clients():
+                fmt = f":{source}!Signal@znc.in PRIVMSG {target} :{{}}"
+                self.put_pretty(body, where="PutClient", fmt=fmt)
+                return
+            # TODO check if this is doable in 1.6; also if there's any
+            # advantage to using the CMessage form for AddLine, etc.
+            if self.znc_version < (1, 7):
+                return
+            #
+            # Could join chan here, but better reserved for explicit command
+            if target.startswith("#"):
+                fmt = f":{source}!Signal@znc.in PRIVMSG {target} :{{text}}"
+                found = session["network"].FindChan(target)
+            else:
+                # TODO see if it's possible to impersonate the client-side of a
+                # query for playback (this is kind of sad)
+                fmt = (f":{target}!Signal@znc.in PRIVMSG {target} "
+                       f":<\x02{source}\x02> {{text}}")
+                found = session["network"].FindQuery(target)
+                if not found:
+                    found = session["network"].AddQuery(target)
+            buf = None
+            if found:
+                buf = found.GetBuffer()
+            if buf:
+                buf.AddLine(fmt, body)
         elif self.debug:
             self.logger.debug("Fell through; request: "
                               f"{request}, session: {session}")
