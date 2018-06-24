@@ -1,6 +1,7 @@
 import traceback  # noqa: F401
 from enum import Enum
 
+IS_MOCK = True
 CONTINUE = None
 
 
@@ -16,8 +17,18 @@ class ModuleNV(dict):
 
 class Module:
 
+    def GetUser(self):
+        return CUser()
+
+    def GetNetwork(self):
+        return self._network
+
     def GetClient(self):
-        return CClient()
+        client = CClient()
+        client._full_name = "{}@{}/{}".format(self._user,
+                                              self._client_ident,
+                                              self._network)
+        return client
 
     def GetSavePath(self):
         raise NotImplementedError
@@ -29,9 +40,19 @@ class Module:
 class Socket: pass  # noqa: E701
 
 
+class CUser:
+    def IsAdmin(self):
+        return True
+
+    def GetNetworks(self):
+        return ()
+
+
 class CClient:
+    _full_name = None
+
     def GetFullName(self):
-        pass
+        return self._full_name
 
 
 def fake_getmoddirs():

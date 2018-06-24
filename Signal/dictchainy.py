@@ -32,7 +32,7 @@ class ConfigError(RuntimeError): pass  # noqa E701
 
 
 class ProtectedItemError(ConfigError):
-    """Marker raised when an attempt is made to mutate a ErsatzList
+    """Marker raised when an attempt is made to mutate an ErsatzList
 
     Should trigger special handling, like copying the list to a user-
     map node at the same path, and then retrying the original operation.

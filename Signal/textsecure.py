@@ -6,13 +6,12 @@ from . import get_logger
 
 
 class Signal(znc.Module):
-    module_types = [znc.CModInfo.UserModule, znc.CModInfo.NetworkModule]
+    module_types = [znc.CModInfo.UserModule]
     description = "Interact with a local Signal endpoint"
     args_help_text = "DATADIR=<path> DEBUG=<bool> LOGFILE=<path>"
     has_args = True
     znc_version = None  # tuple, e.g. 1.7.0-rc1 -> (1, 7, 0)
     data_dir = None     # str, $DATADIR or path from CModule::GetSavePath()
-    mod_type = None     # str, "User" or "Network"
     networks = None     # tuple, CIRCNetwork swig objects
     env = None          # dict, copy of environ w. SIGNALMOD_ prefixes dropped
     tz = None           # datetime.timezone
@@ -72,49 +71,62 @@ class Signal(znc.Module):
             self.put_pretty(f"\x02{etype.__name__}\x02: {value}", where)
 
     def put_pretty(self, lines, where=None):
-        """Prep multi-line strings for client-facing ``Put*`` funcs
+        """Call the appropriate client-facing ``Put*`` function
 
         Messages specifying IRC commands must already be formatted. A
         format string could be used in the future to apply line-wise
         formatting dynamically, but required fields would need to be
         provided (perhaps as part of a ``CMessage`` object).
+
+        Format can be like that used by CBuffer and friends:
+
+            '!watch@znc.in PRIVMSG {target} :{text}'
+
         """
-        args = []
+        #
+        # TODO add 'source' arg for PutClient; otherwise, no point in calling
+        # this func if having to preformat every line beforehand
         putters = None
         where = where or "PutModule"
-        lines = "{}".format(lines).splitlines()
         #
         if where == "PutIRC":
             # TODO would have to pass network name/obj for this to work
-            raise RuntimeError("'PutIRC' is not yet supported")
+            raise RuntimeError("'PutIRC' must be called manually")
         elif where == "PutClient":  # untried on 1.6.x
+            # Callbacks usually want this sent to all clients, not just the
+            # last to invoke a mod command
             putters = self.get_clients()
-        #
-        if not putters and self.mod_type == "User":
-            if where == "PutUser":
-                putters = self.networks
-            # XXX this really smells like a workaround; if there's an intended
-            # way to access the PutModule method bound to the most recent
-            # command-issuing client instance, that should replace this:
-            elif self.last_mod_cmd is not None:  # CClient->PutModule
+        elif where in ("PutUser", "PutStatus"):
+            # CUser.PutStatus also works outside of On* hooks
+            putters = self.networks
+        elif self.last_mod_cmd and where in ("PutModule", "PutModNotice"):
+            # Note: if needing to trigger OnSendToClientMessage or prefix with
+            # a custom source, use PutClient instead
+            client = self.GetClient()
+            if client is None:
+                # Probably not in an On* hook (fired from some callback)
                 clients = self.get_clients(as_dict=True)
-                putters = (clients[self.last_mod_cmd["client"]],)
-                args += ["Signal"]
-            else:
-                if self.debug:
-                    clients = self.get_clients(just_names=True)
-                    self.logger.debug(f"last_mod_cmd: {self.last_mod_cmd}, "
-                                      f"clients: {clients}")
+                client = clients[self.last_mod_cmd["client"]]
+            # Callee handles splitting and line-wise formatting and adds status
+            # prefix (leading *) to first arg (usually .GetModName())
+            client.PutModule("Signal", lines)
+            return
+        elif where != "PutTest" and self.debug:
+            clients = self.get_clients(just_names=True)
+            self.logger.debug(f"where: {where}, "
+                              f"last_mod_cmd: {self.last_mod_cmd}, "
+                              f"clients: {clients}")
         if putters is None:
-            putters = (self,)  # mod_type "Network" (PutUser, PutModule)
+            putters = (self,)
+        lines = "{}".format(lines).splitlines()
         for putter in putters:
             for line in lines:
-                getattr(putter, where)(*args, line or " ")
+                getattr(putter, where)(line or " ")
 
     def expand_string(self, string):
         string = self.ExpandString(string)
         if self.znc_version < (1, 7, 0):
-            # Mode (mod_type) doesn't matter if called from a module hook
+            # Shouldn't be used in callbacks; only in module hooks
             try:
                 network = self.GetNetwork().GetName()
             except AttributeError:
@@ -124,14 +136,11 @@ class Signal(znc.Module):
         return string
 
     def get_clients(self, just_names=False, as_dict=False):
-        # Should be mod-type agnostic; GetAllClients call replaces::
+        # Should be mod-type agnostic; GetAllClients call replaces
         #
-        #   clients = chain.from_iterable(net.GetClients() for
-        #                                 net in self.networks)
-        if self.mod_type == "User":
-            clients = self.GetUser().GetAllClients()
-        else:
-            clients = self.networks[0].GetClients()
+        #   flatten_set(net.GetClients() for net in networks)
+        #
+        clients = self.GetUser().GetAllClients()
         if just_names:
             return tuple(c.GetFullName() for c in clients)
         elif as_dict:
@@ -689,10 +698,6 @@ class Signal(znc.Module):
         used by ``test_hooks_mro()`` to prove a point.
         """
         lmc = self.last_mod_cmd
-        if lmc is None:
-            if self.debug:
-                assert self.mod_type == "Network"
-            return znc.CONTINUE
         client_name = str(self.GetClient().GetFullName())
         if self.debug:
             # These include the trailing /<network> portion
@@ -711,15 +716,15 @@ class Signal(znc.Module):
     def _OnLoad(self, argstr, message):
         # Treat module args like environment variables
         import os
+        # TODO use znc.VersionMajor or CZNC.GetVersion() instead
         version_string = znc.CZNC_GetVersion().partition("-")[0]
         self.znc_version = tuple(map(int, version_string.split(".")))
-        self.mod_type = znc.CModInfo_ModuleTypeToString(self.GetType())
-        if self.mod_type == "User":
-            self.networks = self.GetUser().GetNetworks()
-        else:
-            if self.debug:
-                assert self.mod_type == "Network"
-            self.networks = (self.GetNetwork(),)
+        #
+        if not self.GetUser().IsAdmin():
+            message.s = "You must be an admin to use this module"
+            return False
+        #
+        self.networks = self.GetUser().GetNetworks()
         #
         self.env = dict(os.environ)
         # Claim environment-variable namespace -> "SIGNALMOD_"
@@ -737,8 +742,7 @@ class Signal(znc.Module):
         self.log_raw = bools.get(self.env.get("_RAW", "0").lower(), False)
         self.log_old_hooks = bools.get(self.env.get("_OLD_HOOKS",
                                                     "0").lower(), False)
-        # TODO find out if writing non-.registry files to SaveDir interferes
-        # with ZNC, also whether there's a clobbering risk
+        #
         self.data_dir = self.env.get("DATADIR") or self.GetSavePath()
         #
         msg = []
@@ -929,13 +933,12 @@ class Signal(znc.Module):
         # When not hooking, ``GetClient().GetFullName()`` should throw, which
         # is OK. TODO ensure incoming instructions call cmd_* methods directly
         #
-        if self.mod_type == "User":  # if "Network", PutModule() always works.
-            self.last_mod_cmd = {"command": command,
-                                 "network": self.expand_string("%network%"),
-                                 "client": self.GetClient().GetFullName()}
-            # TODO once convinced, delete this and similar
-            if self.debug:
-                assert self.last_mod_cmd["network"] not in ("", "%network%")
+        self.last_mod_cmd = {"command": command,
+                             "network": self.expand_string("%network%"),
+                             "client": self.GetClient().GetFullName()}
+        # TODO once convinced, delete this and similar
+        if self.debug:
+            assert self.last_mod_cmd["network"] not in ("", "%network%")
         #
         try:
             self.mod_commands[mod_name](**vars(namespace))  # void
@@ -985,36 +988,33 @@ class Signal(znc.Module):
         session = self._session
         request = incoming.message
         raw_out = None
-        if self.mod_type == "Network":
-            session.setdefault("network", self.networks[0])
-            if request.startswith("/net"):
-                retort.append("Not applicable for module type 'Network'")
-        else:
-            connected = {n.GetName(): n for n in self.networks if
-                         n.IsIRCConnected()}
-            net_advise = False
-            if not connected:
-                retort.append("Not connected to any networks")
-            elif request.startswith("/net"):
-                cand = request.replace("/net", "", 1).strip()
-                if cand in connected:
-                    session["network"] = connected[cand]
-                    retort.append(f"Network set to: {cand!r}")
-                else:
-                    net_advise = True
-            elif session["network"] is None:
+        #
+        connected = {n.GetName(): n for n in self.networks if
+                     n.IsIRCConnected()}
+        net_advise = False
+        if not connected:
+            retort.append("Not connected to any networks")
+        elif request.startswith("/net"):
+            cand = request.replace("/net", "", 1).strip()
+            if cand in connected:
+                session["network"] = connected[cand]
+                retort.append(f"Network set to: {cand!r}")
+            else:
                 net_advise = True
-            if net_advise:
-                if len(connected) == 1:
-                    __, session["network"] = connected.popitem()
-                else:
-                    joined_nets = ", ".join(connected)
-                    retort.extend(["Multiple IRC networks available:",
-                                   f" {joined_nets}",
-                                   "Select one with: /net <network>"])
-                if session["network"]:
-                    netname = session['network'].GetName()
-                    retort.append(f"Current network is {netname!r}")
+        elif session["network"] is None:
+            net_advise = True
+        if net_advise:
+            if len(connected) == 1:
+                __, session["network"] = connected.popitem()
+            else:
+                joined_nets = ", ".join(connected)
+                retort.extend(["Multiple IRC networks available:",
+                               f" {joined_nets}",
+                               "Select one with: /net <network>"])
+            if session["network"]:
+                netname = session['network'].GetName()
+                retort.append(f"Current network is {netname!r}")
+        #
         if request.startswith("/focus"):
             focus = request.replace("/focus", "", 1).strip()
             if not focus:
@@ -1060,10 +1060,7 @@ class Signal(znc.Module):
             source = self.expand_string("%nick%")
             # TODO add lines to ZNC buffers for context, if possible
             self.put_pretty(f":{source} {raw_out}", where="PutClient")
-            if self.mod_type == "User":
-                session["network"].PutIRC(raw_out)
-            else:
-                self.PutIRC(raw_out)
+            session["network"].PutIRC(raw_out)
         elif self.debug:
             self.logger.debug("Fell through; request: "
                               f"{request}, session: {session}")
@@ -1250,10 +1247,7 @@ class Signal(znc.Module):
                 flattened[cat] = bcd.peel(peel=peel)
             return flattened
         #
-        if self.mod_type == "Network":
-            nvid = self.expand_string("%user%/%network%")
-        else:
-            nvid = self.expand_string("%user%")
+        nvid = self.expand_string("%user%")
         if not hasattr(self, "_nv_undo_stack"):
             from collections import deque
             self._nv_undo_stack = deque()

@@ -226,13 +226,18 @@ def all_in(haystack, *needles, pop_solo=True):
 
 from Signal.textsecure import Signal  # noqa: E402
 
+# Ensure this isn't real ZNC
+from Signal import znc as _znc  # noqa: F401
+if not hasattr(_znc, "IS_MOCK"):
+    raise RuntimeError("Running against real ZNC isn't yet supported")
+
 
 class SignalStub(Signal):
     _using_debug = False
-    _module_type = "NetworkModule"
     _network = "dummynet"
     _user = "testdummy"
     _nick = "dummy"
+    _client_ident = "dummyclient"
     _argstring = ""
     _buffer = None
     _buffer_pos = 0
@@ -260,18 +265,11 @@ class SignalStub(Signal):
             line = ""
         self._buffer_pos += self._buffer.write(line + "\n")
 
-    def GetType(self):
-        from znc import CModInfo
-        return CModInfo[self._module_type]
-
-    def GetNetwork(self):
-        return self._network
-
     def expand_string(self, string):
-        # XXX for now, involving this method causes problems. Bottom line: more
-        # ZNC knowhow is required before output from Module.ExpandString, which
-        # this thig calls, can be simulated. Version/mod-type/calling hook all
-        # affect the result, which may include ignored or null substitutions.
+        # FIXME for now, involving this method causes problems. Bottom line:
+        # more ZNC knowhow is required for simulating Module.ExpandString.
+        # Version, mod-type, calling hook all affect the result, which may
+        # include ignored or null substitutions.
         for pat, sub in (("%user%", self._user), ("%network%", self._network),
                          ("%nick%", self._nick)):
             string = string.replace(pat, sub)
