@@ -23,7 +23,7 @@ RUN set -x && \
 	sed -i '/^nobody/a\signal-cli:x:99:signal-cli' /etc/group && \
 	mkdir -p $SIGNAL_CLI_HOME && \
 	chown 99:99 $SIGNAL_CLI_HOME && \
-	apk add --no-cache bash dbus build-base supervisor && \
+	apk add --no-cache dbus build-base supervisor && \
 	mkdir -p /etc/dbus-1/system.d \
 		/etc/supervisord.d \
 		/usr/local/share/supervisord \
@@ -59,7 +59,7 @@ COPY supervisord.conf /etc/supervisord.conf
 
 # Initial heap size used by upstream /data/signal.service
 ENV SIGNAL_CLI_OPTS=-Xms2m
-COPY entrypoint.bash /entrypoint.bash
-RUN chmod +x /entrypoint.bash && \
-	ln -s /entrypoint.bash /usr/local/bin/interact
-ENTRYPOINT ["/entrypoint.bash"]
+COPY entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh && \
+	ln -s /entrypoint.sh /usr/local/bin/interact
+ENTRYPOINT ["/entrypoint.sh"]
