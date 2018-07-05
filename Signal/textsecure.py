@@ -1066,16 +1066,15 @@ class Signal(znc.Module):
                               f"{request}, session: {session}")
 
     def make_generic_callback(self, real_callback, *args, **kwargs):
-        "For normal dbus method calls, not dbus signal subscriptions"
+        "Make a callback for normal D-Bus methods (not signals)"
         def generic_callback(fut):
             try:
                 result = fut.result()
-            except Exception:
-                self.print_traceback()  # <- ``fut.exception``, if set
-            else:
                 if result != ():
                     result = result[0]
                 real_callback(result, *args, **kwargs)
+            except Exception:
+                self.print_traceback()  # <- ``fut.exception``, if set
 
         return generic_callback
 
