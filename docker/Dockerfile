@@ -12,6 +12,7 @@ ADD src/signal-cli-$SIGNAL_CLI_VERSION.tar.gz /
 ADD src/libmatthew-java-$LIBMATTHEW_VERSION.tar.gz /src
 
 
+# TODO use system UID > SYS_UID_MIN (also GID)
 ARG pwdent=signal-cli:x:99:99:signal-cli:$SIGNAL_CLI_HOME:/sbin/nologin
 RUN set -x && \
 	sed -i '/^nobody/a\'$pwdent /etc/passwd && \
@@ -23,6 +24,17 @@ RUN set -x && \
 		/var/log/supervisord /var/run/supervisord && \
 	cd /src/libmatthew-java-$LIBMATTHEW_VERSION && \
 	LIBDIR=$JAVA_HOME/lib/amd64 make install
+
+COPY link_libs.sh /usr/local/bin/
+# Ensure all locations in java's library path contain libunix; for now, do so
+# explicitly, only using script to verify
+RUN chmod 755 /usr/local/bin/link_libs.sh && \
+	ln -s ../../../lib/amd64/libunix-java.so $JAVA_HOME/jre/lib/amd64 && \
+	ln -s ../libunix-java.so $JAVA_HOME/jre/lib/amd64/server && \
+	ln -s $JAVA_HOME/lib/amd64/libunix-java.so /lib && \
+	ln -s $JAVA_HOME/lib/amd64/libunix-java.so /usr/lib && \
+	/usr/local/bin/link_libs.sh
+
 
 COPY src/org.asamk.Signal.conf /etc/dbus-1/system.d/
 COPY listen_tcp.conf /etc/dbus-1/system.d/
@@ -40,6 +52,8 @@ ENV PATH $PATH:/signal-cli-$SIGNAL_CLI_VERSION/bin
 RUN cd $SIGNAL_CLI_HOME && \
 	echo "declare -x PATH=\$PATH:/signal-cli-$SIGNAL_CLI_VERSION/bin" \
 	> .bash_profile && chown 99:99 .bash_profile
+
+# Initial heap size used by upstream /data/signal.service
 ENV SIGNAL_CLI_OPTS=-Xms2m
 COPY entrypoint.bash /entrypoint.bash
 RUN chmod +x /entrypoint.bash && \
