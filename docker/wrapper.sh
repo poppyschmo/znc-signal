@@ -8,14 +8,23 @@ ensure_up() {
         --dest=org.freedesktop.DBus / org.freedesktop.DBus.GetId
 }
 
-while ! ensure_up >/dev/null 2>&1; do
-    echo "Waiting for D-Bus..." >&2
-    sleep 5
-done
+is_daemon() {
+    for arg; do
+        case $arg in daemon) return 0 ;; esac
+    done
+    return 1
+}
 
+if is_daemon "$@"; then
+    while ! ensure_up >/dev/null 2>&1; do
+        echo "Waiting for D-Bus..." >&2
+        sleep 5
+    done
+    opts=$SIGNAL_CLI_OPTS
+fi
 
 CP=/usr/share/java/libmatthew/unix.jar
 CP=$CP$(printf ':%s' /usr/share/java/signal-cli/*.jar)
 CMD=$(realpath "$(which java)")
 #                                                     shellcheck disable=SC2086
-exec "$CMD" $SIGNAL_CLI_OPTS -cp "$CP" org.asamk.signal.Main "$@"
+exec "$CMD" $opts -cp "$CP" org.asamk.signal.Main "$@"
