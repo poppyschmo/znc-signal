@@ -1164,7 +1164,7 @@ class Signal(znc.Module):
         r"""An extremely limited dbus-send_(1) analog
 
         <node>     a key from the address book below: str
-        <method>   basename (no interface components): str
+        <method>   leaf member (no interface components): str
         <callback> callable(fut: asyncio.Future) -> void
         [<args>]   iterable
 
@@ -1664,12 +1664,12 @@ class Signal(znc.Module):
         Note: <raw_string> is always evaluated, if present, so single strings
         must have nested quotes.
         """
-        # TODO add hidden alias for this to DBUS-SEND(1): command-line tool of
-        # nearly the same name makes invoking this error-prone.
+        # TODO find out why this occasionally disconnects after certain
+        # method-call/object combinations
         try:
             assert self._connection.unique_name is not None
         except (AttributeError, AssertionError):
-            return self.cmd_help("send")
+            return self.cmd_help(("send",))
         #
         put_mod_cb = self.make_generic_callback(self.put_pretty)
         args = []
