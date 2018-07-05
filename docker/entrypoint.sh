@@ -25,10 +25,12 @@ if [ $# -eq 0 ]; then
             --nodaemon --pidfile /var/run/supervisord.pid \
             --configuration /etc/supervisord.conf
     else
-        dbus-daemon --system
-        sleep 0.1
-        set -- sh
-    fi
+        printf '\x1b[31mProblem starting container\x1b[m\n'
+        echo "Use 'docker exec -it <container> sh -l' to investigate"
+        set -x
+        env | sort | grep SIGNAL_CLI
+        set -- sleep 1d
+    fi >&2
 elif ! pgrep -f supervisord >/dev/null 2>&1; then
     echo "supervisord is not running"
 elif supervisorctl status signal-cli | grep -i stop; then

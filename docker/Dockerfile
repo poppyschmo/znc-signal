@@ -57,6 +57,11 @@ RUN sed -i -e "s/%interface_name%/$interface_name/" \
 
 COPY supervisord.conf /etc/supervisord.conf
 
+RUN ( echo 'alias ll="ls -alh"; USER=$(id -un); export USER'; \
+	echo 'alias rm="rm -i"; alias cp="cp -i"; alias mv="mv -i"'; ) \
+	> /etc/profile.d/aliases.sh ; \
+	mv /etc/profile.d/color_prompt /etc/profile.d/color_prompt.sh
+
 # Initial heap size used by upstream /data/signal.service
 ENV SIGNAL_CLI_OPTS=-Xms2m
 COPY entrypoint.sh /entrypoint.sh
