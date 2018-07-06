@@ -155,6 +155,25 @@ class Signal(znc.Module):
             return {c.GetFullName(): c for c in clients}
         return tuple(clients)
 
+    def get_network(self, name, disconnected=False):
+        """Convenience func for retrieving a single network by name"""
+        return self.get_networks(as_dict=True,
+                                 disconnected=disconnected).get(name)
+
+    def get_networks(self, just_names=False, as_dict=False,
+                     disconnected=False):
+        """Return all networks as a tuple (of names or objs) or a dict
+        """
+        # Calling GetClients() on returned networks is simpler than filtering
+        # result of self.get_clients(), above.
+        networks = (n for n in self.GetUser().GetNetworks() if
+                    disconnected or n.IsIRCConnected())
+        if just_names:
+            return tuple(n.GetName() for n in networks)
+        elif as_dict:
+            return {n.GetName(): n for n in networks}
+        return tuple(networks)
+
     def reckon(self, data):
         """Run conditions checks against normalized hook data
 
