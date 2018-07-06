@@ -12,7 +12,6 @@ class Signal(znc.Module):
     has_args = True
     znc_version = None  # tuple, e.g. 1.7.0-rc1 -> (1, 7, 0)
     data_dir = None     # str, $DATADIR or path from CModule::GetSavePath()
-    networks = None     # tuple, CIRCNetwork swig objects
     env = None          # dict, copy of environ w. SIGNALMOD_ prefixes dropped
     tz = None           # datetime.timezone
     config = None       # config_NT, members are BaseConfigDict subclasses
@@ -101,7 +100,7 @@ class Signal(znc.Module):
                 args.append("Signal")
         elif where in ("PutUser", "PutStatus"):
             # CUser.PutStatus also works outside of On* hooks
-            putters = self.networks
+            putters = self.get_networks()
         elif where != "PutTest" and self.debug:
             clients = self.get_clients(just_names=True)
             self.logger.debug(f"where: {where!r}, clients: {clients}")
@@ -739,10 +738,8 @@ class Signal(znc.Module):
             message.s = "You must be an admin to use this module"
             return False
         #
-        self.networks = self.GetUser().GetNetworks()
-        #
         self.env = dict(os.environ)
-        # Claim environment-variable namespace -> "SIGNALMOD_"
+        # Claim environment-variable namespace "SIGNALMOD_"
         for env_key, env_val in os.environ.items():
             if env_key.lower().startswith("signalmod_"):
                 trunc_key = env_key.upper().replace("SIGNALMOD_", "")
@@ -995,8 +992,7 @@ class Signal(znc.Module):
         target = None
         body = None
         #
-        connected = {n.GetName(): n for n in self.networks if
-                     n.IsIRCConnected()}
+        connected = self.get_networks(as_dict=True)
         net_advise = False
         if not connected:
             retort.append("Not connected to any networks")
@@ -1065,9 +1061,10 @@ class Signal(znc.Module):
         if target and body is not None:
             session["network"].PutIRC(f"PRIVMSG {target} :{body}")
             source = self.expand_string("%nick%")
-            if self.get_clients():
+            if session["network"].GetClients():
                 fmt = f":{source}!Signal@znc.in PRIVMSG {target} :{{}}"
-                self.put_pretty(body, where="PutClient", fmt=fmt)
+                self.put_pretty(body, where="PutClient", fmt=fmt,
+                                putters=session["network"].GetClients())
                 return
             # TODO check if this is doable in 1.6; also if there's any
             # advantage to using the CMessage form for AddLine, etc.
