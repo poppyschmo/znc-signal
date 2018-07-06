@@ -90,17 +90,10 @@ class Signal(znc.Module):
             # An ignore list can be added later, if needed (see upstream)
             putters = self.get_clients()
         elif where in ("PutModule", "PutModNotice"):
-            # TODO figure out how to predict GetClient() behavior during
-            # async callbacks; sometimes returns a CClient swig proxy when
-            # expecting None (no longer in OnModCommand or other On* hook)
             client = self.GetClient()
             if not client and self.last_mod_cmd:
                 clients = self.get_clients(as_dict=True)
                 client = clients[self.last_mod_cmd["client"]]
-                if self.debug:
-                    # TODO print frame stack (not helpful as is)
-                    self.logger.debug(f"client: None; where: {where!r};"
-                                      f" lines: {lines!r}")
             if client:
                 # Callee handles splitting and line-wise formatting and adds
                 # status prefix to mod name
@@ -139,8 +132,19 @@ class Signal(znc.Module):
                 string = string.replace(pat, sub)
         return string
 
+    def get_client(self, name):
+        """Retrieve a single client by name
+
+        The key must contain ``@<ident>`` and a trailing ``/<network>``
+        name.  Calling ``self.GetClient().GetFullName()`` from an
+        ``On*`` hook doesn't guarantee the latter. See
+        ``OnClientDisconnect``
+        """
+        return self.get_clients(as_dict=True).get(name)
+
     def get_clients(self, just_names=False, as_dict=False):
-        # Should be mod-type agnostic; GetAllClients call replaces
+        """Return all clients as a tuple (of names or objs) or a dict"""
+        # Should be mod-type agnostic; GetAllClients() replaces
         #
         #   flatten_set(net.GetClients() for net in networks)
         #
