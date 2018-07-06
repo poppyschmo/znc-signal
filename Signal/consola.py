@@ -179,9 +179,17 @@ class Console(znc.Socket, InteractiveConsole):
         elif exitmsg != '':
             self.write('%s\n' % exitmsg)
 
+    def put_issuer(self, msg):
+        """Emit messages to issuing client only, if still connected
+
+        Otherwise, target all clients, regardless of network
+        """
+        client = self.module.get_client(self.issuing_client)
+        self.module.put_pretty(msg, putters=(client,) if client else None)
+
     def write(self, msg):
         if self.IsClosed():
-            self.module.put_pretty(msg)
+            self.put_issuer(msg)
         else:
             self.Write(msg)
 
@@ -199,7 +207,8 @@ class Console(znc.Socket, InteractiveConsole):
 
     # TODO use more precise errors for these
     def OnConnected(self):
-        self.module.put_pretty(f"Client connected from: {self.GetSockName()}")
+        self.put_issuer("Python console connected from {!r}"
+                        .format(self.GetSockName()))
         self.module._console_client = self
         self.SetSockName("Console client for %s" % self.module.GetModName())
         self.SetTimeout(0)  # Type is ALL
@@ -213,7 +222,7 @@ class Console(znc.Socket, InteractiveConsole):
         self.throw_gen(EOFError, "Timed Out")
 
     def OnSockError(self, *args):
-        self.module.put_pretty("Got a SockError%r" % (args))
+        self.put_issuer("Got a SockError: %r" % (args))
 
     def OnShutdown(self):
         name = self.GetSockName()

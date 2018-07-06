@@ -1812,7 +1812,9 @@ class Signal(znc.Module):
         if port is not None:
             kwargs["port"] = int(port)
         from .consola import Console
-        sock = self.CreateSocket(get_listener(Console, **kwargs))
+        issuer = self.GetClient().GetFullName()
+        sock = self.CreateSocket(get_listener(Console, issuing_client=issuer,
+                                              **kwargs))
         self._console_listener = sock
         port = sock.Listen(**kwargs)
         if not port:
