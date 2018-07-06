@@ -1,5 +1,10 @@
 # ZNC-Signal
 
+A highlight-style forwarder<sup>[1](#user-content-forwarder)</sup> inspired by
+[ZNC Push][] but exclusive to a [single service][]—and with added support for
+two-way messaging
+
+
 ### Requirements and dependencies
 - A [dedicated Signal number](#getting-a-number) for this account alone
 - [ZNC][] 1.6.6+ with modpython (preferably running in a Docker container)
@@ -12,36 +17,37 @@
 
 The recommended setup is to run both ZNC and signal-cli in Docker containers.
 These should be capable of addressing one another by
-hostname.<sup>[1](#user-content-hostname)</sup> The [official ZNC Docker
+hostname.<sup>[2](#user-content-hostname)</sup> The [official ZNC Docker
 image][dockerhubznc] (full) is recommended, but please use the provided
 [`/docker/Dockerfile`](docker/Dockerfile) for signal-cli (or use it as
-a baseline).<sup>[2](#user-content-image)</sup> If not using the recommended
+a baseline).<sup>[3](#user-content-image)</sup> If not using the recommended
 setup, a bit of finagling may be
-required.<sup>[3](#user-content-other_setups)</sup>
+required.<sup>[4](#user-content-other_setups)</sup>
 
 Users with existing signal-cli accounts should bind a *copy* of their
 config-data directory to the one assigned to the container's `signal-cli`
-user.<sup>[4](#user-content-vols)</sup> New users should instead provide an
+user.<sup>[5](#user-content-vols)</sup> New users should instead provide an
 empty host-side directory. The container-side counterpart,
 `/var/lib/signal-cli/.config/signal/`, as well as other defaults, can be
 customized with various build- and runtime arguments (see
 [`/docker/*`](docker) for more info).
 
 After securing a dedicated number, new users should proceed with the usual
-signal-cli [setup steps][sigcliusage] (all two of 'em) via
-`docker-exec`.<sup>[5](#user-content-chicken_egg)</sup>
+signal-cli [setup steps][sigcliusage] (typically just
+registration/verification) via
+`docker-exec`.<sup>[6](#user-content-chicken_egg)</sup>
 
 ### The ZNC module
 There's no need for `pip`/`make`/`setup.py`. Just copy the [`/Signal`](Signal)
 directory to the host-side Docker volume under the `/modules` subdirectory.
-Reload modpython, then load the module (remembering the capital "S").
+Load the module (remembering the capital "S").
 
 
 ### Getting a number
 Various [options][SigDeskContrib] exist and are worth exploring, including
 landlines with voice-based verification. In the meantime, if you have access to
-a US mobile number, a Twilio trial<sup>[6](#user-content-twilio_trial)</sup>
-can probably hold you over.<sup>[7](#user-content-twilio_period)</sup>
+a US mobile number, a Twilio trial<sup>[7](#user-content-twilio_trial)</sup>
+can probably hold you over.<sup>[8](#user-content-twilio_period)</sup>
 
 
 ## Caveats
@@ -66,12 +72,17 @@ The following aren't so much disclaimers as admissions of shortcomings.
    forwards to are most likely immune from being permanently compromised, so
    long as you own those numbers.
 6. For the above reasons, it's not recommended to make this available in
-   multi-user ZNC setups or mission-critical operations at this time.
+   multi-user ZNC setups or mission-critical operations at this time. In other
+   words, although this module's type is "User", for now, it should be
+   considered admin-only and single-user only.
 
 
 ## Notes
 
-1. <a name="hostname"></a> This ZNC module talks to signal-cli using the D-Bus
+1. <a name="forwarder"></a> A [mentions][] aggregator like [ZNC Watch][] that
+   automatically forwards messages based on match conditions.
+
+2. <a name="hostname"></a> This ZNC module talks to signal-cli using the D-Bus
    protocol over a "local" TCP connection. In simple setups, this means both
    containers should reside on the same "custom" network (i.e., not "bridge").
    ```console
@@ -84,13 +95,13 @@ The following aren't so much disclaimers as admissions of shortcomings.
    (see revision 0.33 of the [spec][dbus_spec]).
 
 
-2. <a name="image"></a> Pulling some random signal-cli image from Docker Hub
+3. <a name="image"></a> Pulling some random signal-cli image from Docker Hub
    definitely won't work. Also note that various build args like `port_number`
    and `interface_name` may be necessary. If using the
    [`/docker/Makefile`](docker/Makefile) to retrieve the required tarballs, be
    aware that **PGP signatures are not checked**.
 
-3. <a name="other_setups"></a> *Other configurations*. For example, if only
+4. <a name="other_setups"></a> *Other configurations*. For example, if only
    signal-cli is containerized, you may have to fiddle with the D-Bus
    connection on the host box. Experimenting with the `dbus-send` tool is
    already described in the signal-cli [wiki][sigclidbuswiki]. There's no need
@@ -108,13 +119,13 @@ The following aren't so much disclaimers as admissions of shortcomings.
        string:+18883821222
 
    ```
-   If also running signal-cli on the host machine, the transport *must* still
+   If also running signal-cli on the host machine, the transport *must still*
    be TCP, so make certain the interface is local-only. More complicated
-   setups involving internet-spanning connections probably aren't worth the
+   setups involving Internet-spanning connections probably aren't worth the
    trouble, unless you're a networking expert.
 
 
-4. <a name="vols"></a> In its simplest form, `docker-run`'s
+5. <a name="vols"></a> In its simplest form, `docker-run`'s
    [`--volume` option][dockerrundocs] takes an argument of
    `HOST-DIR:CONTAINER-DIR`. Docker Compose and the various Docker-related
    configuration-management tools all use the same option name and value
@@ -140,7 +151,7 @@ The following aren't so much disclaimers as admissions of shortcomings.
    "{{ $m := index .Mounts 0 }}{{ $m.Source }}:{{ $m.Destination }}"
    ```
 
-5. <a name="chicken_egg"></a> The whole *Catch-22* of having to initialize the
+6. <a name="chicken_egg"></a> The whole *Catch-22* of having to initialize the
    container with an existing account can be sidestepped by providing `--env
    SIGNAL_CLI_USERNAME=<new number>` on the first go-round, even though
    the number's still unregistered. That way, you can use `docker-exec` as
@@ -160,7 +171,7 @@ The following aren't so much disclaimers as admissions of shortcomings.
    Note: to access the utility non-interactively, you must first stop the
    service manually:
    ```console
-   ># docker exec sigcli_service /entrypoint.bash true
+   ># docker exec sigcli_service /entrypoint.sh true
    signal-cli: stopped
 
    ># docker exec --user signal-cli my_container signal-cli --help
@@ -170,7 +181,7 @@ The following aren't so much disclaimers as admissions of shortcomings.
    my_container
    ```
 
-6. <a name="twilio_trial"></a>
+7. <a name="twilio_trial"></a>
    *Twilio trial accounts*.<sup>[a](#user-content-helper)</sup> Requirements:
    a web browser, a working US-mobile number.
 
@@ -204,7 +215,7 @@ The following aren't so much disclaimers as admissions of shortcomings.
          reset it to the original demo addresss of:
          `https://demo.twilio.com/welcome/sms/`).
 
-7. <a name="twilio_period"></a> (Or be prolonged abusively, if stretching
+8. <a name="twilio_period"></a> (Or be prolonged abusively, if stretching
    dollars is in your current job description.) As a deterrent against
    protracted trials, numbers are currently revoked after a month or so of
    "inactivity."
@@ -212,60 +223,56 @@ The following aren't so much disclaimers as admissions of shortcomings.
 
 ## Issues, TODOs, etc.
 Move these points to individual issues threads (and somehow translate current
-ordering/priority):
+ordering/priority). Also collect and consolidate general questions involving
+fundamental ZNC and/or SWIG behavior. Possibly do the same for IRC/RFC related
+stuff. Add simple, reproducible examples.
 
-1. Integrate signal-cli 0.6.0 features
+1. Wait for signal-cli to acquire a name from the message bus, and send
+   progress updates to the invoking client. Currently, newly spawned
+   containers are encumbered by a significant startup delay (at times
+   approaching near limbo). This issue is currently being investigated.
+
+2. Remove all hook-inspection and interception from the main module. (Perhaps
+   create a dedicated "learning" module for this purpose.) Explicitly define
+   all `On*`-style hook methods for easier maintenance and sharing.
+
+3. File upstream bug reports where warranted.
+
+4. Integrate signal-cli 0.6.0 features
    1. Employ receipt subscription and acknowledgment
    2. Queue undelivered messages
-   3. Alert attached clients or save to context buffers when backlogs arise;
-      in debug mode, just dump
-2. Prepare a TCP/Unix-domain-socket shim for the signal-cli container in case
+   3. Alert attached clients or save to context buffers when backlogs arise
+
+5. Prepare a TCP/Unix-domain-socket shim for the signal-cli container in case
    some future release of D-Bus drops TCP support entirely.
-3. Find some means of testing against real ZNC and signal-cli instances to
+
+6. Find some means of testing against real ZNC and signal-cli instances to
    stay abreast of recent developments. Perhaps a move to GitLab would make
    this easier. Although ZNC, Signal, and signal-cli are all on GitHub.
-4. Either implement or remove the various "placeholder" config options
-   stolen early on from [ZNC Push](https://wiki.znc.in/Push). These are all
-   currently ignored:
+
+7. Either implement or remove the various "placeholder" config options
+   stolen early on from [ZNC Push][]. These are all currently ignored:
    1. `/templates/*/length`
    2. `/conditions/*/replied_only`
    3. `/conditions/*/timeout_post`
    4. `/conditions/*/timeout_push`
    5. `/conditions/*/timeout_idle`
-5. Prepare for `getGroupIds()` in subsequent signal-cli release.
-6. Drop support for sub-1.7 ZNC versions at some target date or with the next
+
+8. Prepare for `getGroupIds()` in subsequent signal-cli release.
+
+9. Drop support for sub-1.7 ZNC versions at some target date or with the next
    minor ZNC release.
-7. Possibly convert [`/docker/entrypoint.bash`](docker/entrypoint.bash) to a
-   POSIX shell script. Thought Alpine's D-Bus required bash, but it doesn't.
-8. Add bootstrapped deployment examples in the form of DSL files for various
-   orchestration ecosystems.
-
-
-### General IRC/ZNC questions
-
-Collect and consolidate questions involving fundamental ZNC and/or SWIG
-behavior. Possibly do the same for IRC/RFC related stuff. If possible, add
-simple, reproducible examples.
-
-1. This only applies when loaded as `CModInfo.UserModule`. When sending
-   "status"-like info to clients (not incoming IRC messages) from an arbitrary
-   `PyObject` created via `CreateSocket` or `CreateTimer`, calling bound
-   methods like `PutModule` on the "instance" returned by `GetModule()`, fails
-   to write anything to the socket. Yet the call returns true.
-2. Find out whether ZNC automatically intercepts disk I/O and passes it to a
-   selector/scheduler/manager of some sort. If not, and all file-system access
-   is blocking, it'd be nice to know if such queuing/spooling is possible (and
-   where relevant parts can be located in the source code). In this module,
-   "NV" access is rare/infrequent, but logging is a constant trickle.
 
 
 ### Lofty spitballing
-1. Impersonate a mini client in a sub/executor process and work out a simple
+1. Add bootstrapped deployment examples in the form of DSL files for various
+   orchestration ecosystems.
+2. Impersonate a mini client in a sub/executor process and work out a simple
    means of message-passing. Would have to connect without triggering any "On"
    hooks so ZNC and other modules don't dump their buffers. The point of this
    would be to allow (optional) full control over ZNC.
 
-2. Support "proxied" conversations between two or more instances of this
+3. Support "proxied" conversations between two or more instances of this
    module. Would require convincing some computer expert to explain how this
    should work (or write the actual code). For certain, all participants must
    reveal their `signal-cli` account numbers to each other, perhaps through
@@ -282,16 +289,17 @@ simple, reproducible examples.
       ↑↓                                       ↑↓
      Bob       /* IRC or Signal client */     Alice
    ```
-3. Convince upstream to add attachments support over D-Bus. This could open the
+4. Convince upstream to add attachments support over D-Bus. This could open the
    door to a host of handy features for mobile users, among them the option
    for receiving buffer dumps as browser-ingestible content, which could
    progressively load as updates arrive (without requiring a browser plugin or
    a local web server).
 
-4. Explore adding the node-js-based headless Signal client as a fallback for
+5. Explore adding the node-js-based headless Signal client as a fallback for
    signal-cli.
 
-
+[ZNC Push]: https://github.com/jreese/znc-push
+[single service]: https://signal.org
 [SigDeskContrib]: https://github.com/signalapp/Signal-Desktop/blob/master/CONTRIBUTING.md#additional-storage-profiles
 [ZNC]: https://github.com/znc/znc
 [signal-cli]: https://github.com/AsamK/signal-cli
@@ -305,3 +313,5 @@ simple, reproducible examples.
 [twilio_incoming]: https://www.twilio.com/console/phone-numbers/incoming
 [twilio_logs]: https://www.twilio.com/console/sms/logs
 [dbus_spec]: https://dbus.freedesktop.org/doc/dbus-specification.html#transports
+[mentions]: https://en.wikipedia.org/wiki/Mention_(blogging)
+[ZNC Watch]: https://wiki.znc.in/Watch
