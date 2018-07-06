@@ -8,9 +8,13 @@ ENV LIBMATTHEW_VERSION ${LIBMATTHEW_VERSION:-0.8.1}
 ARG signal_cli_home
 ENV SIGNAL_CLI_HOME ${signal_cli_home:-/var/lib/signal-cli}
 
-ADD src/signal-cli-$SIGNAL_CLI_VERSION.tar.gz /
+ADD src/signal-cli-$SIGNAL_CLI_VERSION.tar.gz /src
 ADD src/libmatthew-java-$LIBMATTHEW_VERSION.tar.gz /src
 
+ARG unixver=0.5
+
+COPY link_libs.sh /usr/local/bin/
+COPY wrapper.sh /usr/bin/signal-cli
 
 # TODO use system UID > SYS_UID_MIN (also GID)
 ARG pwdent=signal-cli:x:99:99:signal-cli:$SIGNAL_CLI_HOME:/sbin/nologin
@@ -21,25 +25,30 @@ RUN set -x && \
 	chown 99:99 $SIGNAL_CLI_HOME && \
 	apk add --no-cache bash dbus build-base supervisor && \
 	mkdir -p /etc/dbus-1/system.d \
-		/var/log/supervisord /var/run/supervisord && \
+		/etc/supervisord.d \
+		/usr/local/share/supervisord \
+		/usr/share/java/libmatthew \
+		/usr/share/java/signal-cli \
+		/var/run/supervisord && \
 	cd /src/libmatthew-java-$LIBMATTHEW_VERSION && \
-	LIBDIR=$JAVA_HOME/lib/amd64 make install
+	sed -i 's/-source 1\.5/-source 1.6/' Makefile && \
+	make unix-$unixver.jar libunix-java.so && \
+	install -m 644 unix-$unixver.jar /usr/share/java/libmatthew && \
+	install -m 755 libunix-java.so /usr/lib && \
+	ln -s unix-$unixver.jar /usr/share/java/libmatthew/unix.jar && \
+	chmod 755 /usr/local/bin/link_libs.sh && \
+	/usr/local/bin/link_libs.sh && \
+	chmod 755 /usr/bin/signal-cli && \
+	install -m 644 /src/signal-cli-$SIGNAL_CLI_VERSION/lib/* \
+		/usr/share/java/signal-cli/ && \
+	rm -f /usr/share/java/signal-cli/unix*.jar
 
-COPY link_libs.sh /usr/local/bin/
-# Ensure all locations in java's library path contain libunix; for now, do so
-# explicitly, only using script to verify
-RUN chmod 755 /usr/local/bin/link_libs.sh && \
-	ln -s ../../../lib/amd64/libunix-java.so $JAVA_HOME/jre/lib/amd64 && \
-	ln -s ../libunix-java.so $JAVA_HOME/jre/lib/amd64/server && \
-	ln -s $JAVA_HOME/lib/amd64/libunix-java.so /lib && \
-	ln -s $JAVA_HOME/lib/amd64/libunix-java.so /usr/lib && \
-	/usr/local/bin/link_libs.sh
-
+COPY supervisor_share/* /usr/local/share/supervisord/
 
 COPY src/org.asamk.Signal.conf /etc/dbus-1/system.d/
 COPY listen_tcp.conf /etc/dbus-1/system.d/
-# If mimicking these steps for a non-containerized build, realize that
-# asterisk means 0.0.0.0, which is rarely optimal
+
+# Asterisk means 0.0.0.0, which is okay here if only on one network
 ARG interface_name="*"
 ARG port_number=47000
 RUN sed -i -e "s/%interface_name%/$interface_name/" \
@@ -47,11 +56,6 @@ RUN sed -i -e "s/%interface_name%/$interface_name/" \
 	/etc/dbus-1/system.d/listen_tcp.conf
 
 COPY supervisord.conf /etc/supervisord.conf
-
-ENV PATH $PATH:/signal-cli-$SIGNAL_CLI_VERSION/bin
-RUN cd $SIGNAL_CLI_HOME && \
-	echo "declare -x PATH=\$PATH:/signal-cli-$SIGNAL_CLI_VERSION/bin" \
-	> .bash_profile && chown 99:99 .bash_profile
 
 # Initial heap size used by upstream /data/signal.service
 ENV SIGNAL_CLI_OPTS=-Xms2m

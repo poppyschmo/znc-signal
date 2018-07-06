@@ -3,8 +3,6 @@
 # This file is part of ZNC-Signal. See NOTICE for details.
 # License: Apache 2.0 <http://www.apache.org/licenses/LICENSE-2.0>
 
-libexec_dir=/signal-cli-${SIGNAL_CLI_VERSION:-/tmp/fake}
-SIGNAL_CLI_EXE=$libexec_dir/bin/signal-cli
 
 rm -f /etc/supervisord.d/*.conf
 [[ $DEBUG_SUPER ]] &&
@@ -27,16 +25,8 @@ if (( ! $# )); then
         )
         set -- "${cmdline[@]}"
     else
-        # This only warns (doesn't exit) on failure
         dbus-daemon --system
         sleep 0.1
-        if ! [[ -d $libexec_dir && -x $SIGNAL_CLI_EXE &&
-                -e /var/run/dbus.pid &&
-                -S /var/run/dbus/system_bus_socket ]]; then
-            echo Entrypoint check failed
-            #                                         shellcheck disable=SC2086
-            declare -p ${!SIGNAL_*}
-        fi
         set -- bash
     fi
 elif ! pgrep -f supervisord &>/dev/null; then

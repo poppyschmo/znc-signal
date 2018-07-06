@@ -3,7 +3,7 @@
 # This file is part of ZNC-Signal. See NOTICE for details.
 # License: Apache 2.0 <http://www.apache.org/licenses/LICENSE-2.0>
 
-actual=$JAVA_HOME/lib/amd64/libunix-java.so
+actual=/usr/lib/libunix-java.so
 [ -f "$actual" ] || exit 2
 # https://stackoverflow.com/questions/9551588
 jsrc='
