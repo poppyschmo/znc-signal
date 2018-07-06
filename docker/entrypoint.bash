@@ -6,7 +6,9 @@
 libexec_dir=/signal-cli-${SIGNAL_CLI_VERSION:-/tmp/fake}
 SIGNAL_CLI_EXE=$libexec_dir/bin/signal-cli
 
-rm -f /var/run/dbus.pid
+rm -f /etc/supervisord.d/*.conf
+[[ $DEBUG_SUPER ]] &&
+    ln -s /usr/local/share/supervisord/*.conf /etc/supervisord.d
 
 if (( ! $# )) && [[ ${0##*/} == interact ]]; then
     set -- su -l -s /bin/bash signal-cli
