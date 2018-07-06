@@ -232,3 +232,47 @@ class Console(znc.Socket, InteractiveConsole):
             self.logger.debug("%r shutting down" % name)
         for handler in self.logger.handlers:
             self.logger.removeHandler(handler)
+
+
+class Listener(znc.Socket):
+    """The listener example from the modpython wiki_ article
+
+    .. _wiki: https://wiki.znc.in/Modpython#Sockets
+    """
+    con_class = None
+    con_args = ()
+    con_kwargs = {}
+
+    def OnAccepted(self, host, port):
+        self.con_kwargs.setdefault("host", host)
+        self.con_kwargs.setdefault("port", port)
+        from enum import Enum
+        # 0 is not unique, so the ``.name`` attr and repr are only valid for
+        # the first key initialized to 0.
+        econs = Enum("Csock::ECONState",
+                     ((k, v) for k, v in vars(znc.Csock).items() if
+                      k.startswith("CST_")))
+        self.con_kwargs.setdefault("econs", econs)
+        return self.GetModule().CreateSocket(self.con_class, *self.con_args,
+                                             **self.con_kwargs)
+
+    def OnShutdown(self):
+        if self.IsClosed():
+            mod = self.GetModule()
+            client = mod.get_client(self.con_kwargs["issuing_client"])
+            name = "%s.%s" % (self.__module__, self.__class__.__name__)
+            mod.put_pretty("%r is shutting down" % name,
+                           putters=(client,) if client else None)
+        # GetModule() always works when sock is closed, but sometimes fails
+        # when still open (seemingly after attempt is made to open a new
+        # listener immediately after closing one with identical settings)
+        # TODO see if setting SO_REUSEADDR makes sense
+        else:
+            try:
+                # Emit to all clients, regardless of network
+                self.GetModule().put_pretty("\x02Error\x02: console listener "
+                                            "is not closed")
+            except AttributeError as exc:
+                if not all(s in repr(exc.args) for s in ("NoneType",
+                                                         "GetNewPyObj")):
+                    raise

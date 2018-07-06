@@ -1811,10 +1811,12 @@ class Signal(znc.Module):
         kwargs = dict(bindhost=bindhost)
         if port is not None:
             kwargs["port"] = int(port)
-        from .consola import Console
+        from .consola import Console, Listener
         issuer = self.GetClient().GetFullName()
-        sock = self.CreateSocket(get_listener(Console, issuing_client=issuer,
-                                              **kwargs))
+        sock = self.CreateSocket(Listener)
+        sock.con_class = Console
+        sock.con_kwargs = dict(issuing_client=issuer, **kwargs)
+        #
         self._console_listener = sock
         port = sock.Listen(**kwargs)
         if not port:
@@ -1881,42 +1883,3 @@ class Signal(znc.Module):
         also = "  (<command> [-h] for details)"
         strung[1] = strung[1].replace(len(also) * " ", also, 1)
         self.put_pretty("\n".join(strung))
-
-
-def get_listener(cls, *cls_args, **cls_kwargs):
-    """The listener example from the modpython wiki_ article
-
-    Note: originally tried making this a member func of the main module,
-    but that resulted in crashes related to resource ownership
-
-    .. _wiki: https://wiki.znc.in/Modpython#Sockets
-    """
-    def OnAccepted(inst, host, port):
-        cls_kwargs.setdefault("host", host)
-        cls_kwargs.setdefault("port", port)
-        from enum import Enum
-        # 0 is not unique, so the ``.name`` attr and repr are only valid for
-        # the first key initialized to 0.
-        econs = Enum("Csock::ECONState", ((k, v) for k, v in
-                                          vars(znc.Csock).items() if
-                                          k.startswith("CST_")))
-        cls_kwargs.setdefault("econs", econs)
-        return inst.GetModule().CreateSocket(cls, *cls_args, **cls_kwargs)
-
-    def OnShutdown(inst):
-        name = inst.__class__.__name__
-        if inst.IsClosed():
-            inst.GetModule().put_pretty("%r is shutting down" % name)
-        else:
-            # Triggered when an attempt is made to open a new listener
-            # immediately after closing one with identical settings
-            # TODO see if setting SO_REUSEADDR makes sense
-            try:
-                inst.GetModule().put_pretty("Error: socket is not closed")
-            except AttributeError as exc:
-                if not all(s in repr(exc.args) for s in ("NoneType",
-                                                         "GetNewPyObj")):
-                    raise
-
-    return type(f"{cls.__name__}Listener", (znc.Socket,),
-                dict(OnAccepted=OnAccepted, OnShutdown=OnShutdown))
