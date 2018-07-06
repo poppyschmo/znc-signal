@@ -70,58 +70,62 @@ class Signal(znc.Module):
             etype, value, tb = sys.exc_info()
             self.put_pretty(f"\x02{etype.__name__}\x02: {value}", where)
 
-    def put_pretty(self, lines, where=None):
+    def put_pretty(self, lines, where=None, fmt=None):
         """Call the appropriate client-facing ``Put*`` function
 
-        Messages specifying IRC commands must already be formatted. A
-        format string could be used in the future to apply line-wise
-        formatting dynamically, but required fields would need to be
-        provided (perhaps as part of a ``CMessage`` object).
-
-        Format can be like that used by CBuffer and friends:
-
-            '!watch@znc.in PRIVMSG {target} :{text}'
-
+        Note: ``str.format`` will raise a ``KeyError`` if it detects any
+        kw specifiers, like ``{text}`` in ``fmt``. Only the leftmost
+        ``{}`` is filled and is assumed to be the colon-prefixed "last
+        param". See https://modern.ircdocs.horse/#parameters
         """
         #
-        # TODO add 'source' arg for PutClient; otherwise, no point in calling
-        # this func if having to preformat every line beforehand
-        putters = None
+        # Note: if needing to trigger OnSendToClientMessage or prefix with a
+        # custom source or command (or bypass last_mod_cmd), use PutClient
         where = where or "PutModule"
+        putters = None
+        args = []
+        lines = str(lines)
         #
-        if where == "PutIRC":
-            # TODO would have to pass network name/obj for this to work
-            raise RuntimeError("'PutIRC' must be called manually")
-        elif where == "PutClient":  # untried on 1.6.x
-            # Callbacks usually want this sent to all clients, not just the
-            # last to invoke a mod command
+        if where == "PutClient":  # untried on 1.6.x
+            # An ignore list can be added later, if needed (see upstream)
             putters = self.get_clients()
+        elif where in ("PutModule", "PutModNotice"):
+            # TODO figure out how to predict GetClient() behavior during
+            # async callbacks; sometimes returns a CClient swig proxy when
+            # expecting None (no longer in OnModCommand or other On* hook)
+            client = self.GetClient()
+            if not client and self.last_mod_cmd:
+                clients = self.get_clients(as_dict=True)
+                client = clients[self.last_mod_cmd["client"]]
+                if self.debug:
+                    # TODO print frame stack (not helpful as is)
+                    self.logger.debug(f"client: None; where: {where!r};"
+                                      f" lines: {lines!r}")
+            if client:
+                # Callee handles splitting and line-wise formatting and adds
+                # status prefix to mod name
+                client.PutModule("Signal", lines)
+                return
+            else:
+                # Last client to invoke a mod cmd has disconnected, but
+                # others may remain
+                putters = self.get_clients()
+                args.append("Signal")
         elif where in ("PutUser", "PutStatus"):
             # CUser.PutStatus also works outside of On* hooks
             putters = self.networks
-        elif self.last_mod_cmd and where in ("PutModule", "PutModNotice"):
-            # Note: if needing to trigger OnSendToClientMessage or prefix with
-            # a custom source, use PutClient instead
-            client = self.GetClient()
-            if client is None:
-                # Probably not in an On* hook (fired from some callback)
-                clients = self.get_clients(as_dict=True)
-                client = clients[self.last_mod_cmd["client"]]
-            # Callee handles splitting and line-wise formatting and adds status
-            # prefix (leading *) to first arg (usually .GetModName())
-            client.PutModule("Signal", lines)
-            return
         elif where != "PutTest" and self.debug:
             clients = self.get_clients(just_names=True)
-            self.logger.debug(f"where: {where}, "
-                              f"last_mod_cmd: {self.last_mod_cmd}, "
-                              f"clients: {clients}")
+            self.logger.debug("where: {!r}, last_mod_cmd: {}, clients: {}"
+                              .format(where, self.last_mod_cmd, clients))
         if putters is None:
             putters = (self,)
-        lines = "{}".format(lines).splitlines()
+        lines = lines.splitlines()
         for putter in putters:
             for line in lines:
-                getattr(putter, where)(line or " ")
+                if fmt:
+                    line = fmt.format(line)
+                getattr(putter, where)(*args, line or " ")
 
     def expand_string(self, string):
         string = self.ExpandString(string)
