@@ -24,7 +24,6 @@ class Signal(znc.Module):
     deprecated_hooks = None         # set, redundant, non-CMessage hooks, 1.7+
     approx = None               # cmdopts.AllParsed ~> argparse.ArgumentParser
     mod_commands = None         # dict, {cmd_<name> : method, ...}
-    last_mod_cmd = None         # str, last cmd line passed to OnModCommand
     #
     active_hooks = """
         OnChanMsg       OnChanTextMessage
@@ -70,7 +69,7 @@ class Signal(znc.Module):
             etype, value, tb = sys.exc_info()
             self.put_pretty(f"\x02{etype.__name__}\x02: {value}", where)
 
-    def put_pretty(self, lines, where=None, fmt=None):
+    def put_pretty(self, lines, where=None, fmt=None, putters=None):
         """Call the appropriate client-facing ``Put*`` function
 
         Note: ``str.format`` will raise a ``KeyError`` if it detects any
@@ -80,20 +79,16 @@ class Signal(znc.Module):
         """
         #
         # Note: if needing to trigger OnSendToClientMessage or prefix with a
-        # custom source or command (or bypass last_mod_cmd), use PutClient
+        # custom source or command, use PutClient
         where = where or "PutModule"
-        putters = None
         args = []
         lines = str(lines)
         #
         if where == "PutClient":  # untried on 1.6.x
             # An ignore list can be added later, if needed (see upstream)
-            putters = self.get_clients()
+            putters = putters or self.get_clients()
         elif where in ("PutModule", "PutModNotice"):
             client = self.GetClient()
-            if not client and self.last_mod_cmd:
-                clients = self.get_clients(as_dict=True)
-                client = clients[self.last_mod_cmd["client"]]
             if client:
                 # Callee handles splitting and line-wise formatting and adds
                 # status prefix to mod name
@@ -102,15 +97,14 @@ class Signal(znc.Module):
             else:
                 # Last client to invoke a mod cmd has disconnected, but
                 # others may remain
-                putters = self.get_clients()
+                putters = putters or self.get_clients()
                 args.append("Signal")
         elif where in ("PutUser", "PutStatus"):
             # CUser.PutStatus also works outside of On* hooks
             putters = self.networks
         elif where != "PutTest" and self.debug:
             clients = self.get_clients(just_names=True)
-            self.logger.debug("where: {!r}, last_mod_cmd: {}, clients: {}"
-                              .format(where, self.last_mod_cmd, clients))
+            self.logger.debug(f"where: {where!r}, clients: {clients}")
         if putters is None:
             putters = (self,)
         lines = lines.splitlines()
@@ -716,28 +710,22 @@ class Signal(znc.Module):
             self.approx._wrights.connect(**kwargs)
 
     def OnClientDisconnect(self):
-        """Stop tracking the current client
+        """Obsolete hook; formerly tracked last client to issue command
 
-        This means ``put_pretty()`` will no longer target it.
+        This means ``put_pretty()`` would no longer target it.
 
-        Note: this is defined as an 'explicit' hook because it's not
-        messaging-service related or directly module related. Also, it's
-        used by ``test_hooks_mro()`` to prove a point.
+        TODO remove this function and fix ``test_hooks_mro()``.
         """
-        lmc = self.last_mod_cmd
-        client_name = str(self.GetClient().GetFullName())
         if self.debug:
+            # No trailing "/<network>" portion
+            client_name = self.GetClient().GetFullName()
             # These include the trailing /<network> portion
             all_clients = self.get_clients(True)
-            self.logger.debug(f"attached clients: {all_clients}")
             assert client_name not in all_clients
-        network_name = str(self.GetNetwork().GetName())
-        if (lmc["network"] == network_name and
-                lmc["client"].startswith(client_name)):
-            if self.debug:
-                # Trailing "/<network>" portion is dropped from GetClient()
-                assert "/".join((client_name, network_name)) == lmc["client"]
-            self.last_mod_cmd = None
+            network_name = self.GetNetwork().GetName()
+            assert "/".join((client_name, network_name))
+            self.logger.debug(f"attached clients: {all_clients}; "
+                              f"network_name: {network_name!r}")
         return znc.CONTINUE
 
     def _OnLoad(self, argstr, message):
@@ -956,16 +944,6 @@ class Signal(znc.Module):
         namespace = self.parse_command_args(mod_name, args)
         if namespace is None:
             return znc.CONTINUE
-        #
-        # When not hooking, ``GetClient().GetFullName()`` should throw, which
-        # is OK. TODO ensure incoming instructions call cmd_* methods directly
-        #
-        self.last_mod_cmd = {"command": command,
-                             "network": self.expand_string("%network%"),
-                             "client": self.GetClient().GetFullName()}
-        # TODO once convinced, delete this and similar
-        if self.debug:
-            assert self.last_mod_cmd["network"] not in ("", "%network%")
         #
         try:
             self.mod_commands[mod_name](**vars(namespace))  # void
