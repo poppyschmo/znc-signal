@@ -50,8 +50,7 @@ class DBusConnection(znc.Socket):
             if self.debug:
                 self.logger.debug("Got hello reply: %r" % fut)
             self.unique_name = fut.result()[0]
-            self.module.put_pretty("Session id is: %r. Ready." %
-                                   self.unique_name)
+            self.put_issuer("Session id is: %r. Ready." % self.unique_name)
             if self.module.config and self.module.config.settings["obey"]:
                 try:
                     self.module.do_subscribe()
@@ -69,7 +68,7 @@ class DBusConnection(znc.Socket):
         self.authentication.set_result(True)
         self.data_received = self.data_received_post_auth
         self.data_received(self.auth_parser.buffer)
-        self.module.put_pretty("Authenticated")
+        self.put_issuer("D-Bus connection authenticated")
         self._open_session()
 
     def data_received(self, data):
@@ -112,10 +111,18 @@ class DBusConnection(znc.Socket):
         self.WriteBytes(data)
         return future
 
+    def put_issuer(self, msg):
+        """Emit messages to invoking client only, if still connected
+
+        Otherwise, target all clients, regardless of network
+        """
+        client = self.module.get_client(self.issuing_client)
+        self.module.put_pretty(msg, putters=(client,) if client else None)
+
     def OnConnected(self):
         from jeepney.auth import make_auth_external
         self.WriteBytes(b'\0' + make_auth_external())
-        self.module.put_pretty("Connected to: %s:%s" % self.bus_addr)
+        self.put_issuer("Connected to: %s:%s" % self.bus_addr)
         self.SetSockName("DBus proxy to signal server")
         self.SetTimeout(0)
 
@@ -123,14 +130,14 @@ class DBusConnection(znc.Socket):
         self.data_received(data)
 
     def OnDisconnected(self):
-        self.module.put_pretty("Disconnected from %s:%s" % self.bus_addr)
+        self.put_issuer("Disconnected from %s:%s" % self.bus_addr)
         try:
             del self.module._connection
         except AttributeError:
             pass
 
     def OnTimeout(self):
-        self.module.put_pretty("Connection to %s:%s timed out" % self.bus_addr)
+        self.put_issuer("Connection to %s:%s timed out" % self.bus_addr)
 
     def OnShutdown(self):
         name = self.GetSockName()

@@ -1106,7 +1106,7 @@ class Signal(znc.Module):
         return generic_callback
 
     def do_subscribe(self, action=None):
-        """Not for general ("lowercase" signal) DBus subscriptions;
+        """Not for general ("lowercase" signal) D-Bus subscriptions;
         this is hard-coded for ``Signal.*.MessageReceived`` only.
 
         Unsure whether it's necessary to call ``RemoveMatch`` before
@@ -1134,6 +1134,10 @@ class Signal(znc.Module):
            /blob/925d8db468ce39c0e2b164cc1ab464ea2edf4e86
            /src/main/java/org/asamk/Signal.java#L32
         """
+        # TODO explain "action" kwarg
+        # TODO convert this to a general D-Bus signal-subscription func to
+        # accommodate listening for NameAcquired, etc.
+        #
         try:
             assert self._connection.unique_name is not None, "Not connected"
         except AttributeError as exc:
@@ -1168,8 +1172,11 @@ class Signal(znc.Module):
             if (hasattr(self, "_connection")
                     and not self._connection.IsClosed()):
                 self._connection._subscribed = action is None
-            self.put_pretty("Subscription successfully cancelled" if action
-                            else "Subscription request successful")
+                put_func = self._connection.put_issuer
+            else:
+                put_func = self.put_pretty
+            put_func("Subscription successfully cancelled" if action else
+                     "Subscription request successful")
             if action == "disconnect":
                 return self.cmd_disconnect()
         #
@@ -1658,7 +1665,9 @@ class Signal(znc.Module):
             self.put_pretty("Already connected to %r" % bus_addr)
             return
         from .degustibus import DBusConnection
-        self._connection = self.CreateSocket(DBusConnection, bus_addr=bus_addr)
+        issuer = self.GetClient().GetFullName()
+        self._connection = self.CreateSocket(DBusConnection, bus_addr=bus_addr,
+                                             issuing_client=issuer)
         host, port = bus_addr
         kwargs = dict(host=host, port=port)
         if bindhost is not None:
