@@ -1107,6 +1107,11 @@ class Signal(znc.Module):
 
     def do_subscribe(self, node, member, callback=None, remove=False):
         """Add or remove a match rule
+
+        ``callback``
+            Must not take any argument; if add/remove call fails,
+            wrapper will throw before callback is fired
+
         Not for general ("lowercase" signal) D-Bus subscriptions;
         this is hard-coded for ``Signal.*.MessageReceived`` only.
 
@@ -1149,7 +1154,8 @@ class Signal(znc.Module):
                                member=member,
                                path=service.object_path)
         #
-        def request_callback(result):  # noqa E306
+        def request_cb(fut):  # noqa E306
+            result = fut.result()
             msg = []
             if result != ():
                 msg.append("Problem with subscription request")
@@ -1166,18 +1172,12 @@ class Signal(znc.Module):
                 except RuntimeError:
                     self.print_traceback()
                 return None
-            fmt = "{} D-Bus subscription for {!r}"
-            msg = fmt.format("Cancelled" if remove else "Obtained", member)
-            self._connection.put_issuer(msg)
             # Confusing: see cmd_disconnect below for reason (callback hell)
-            if remove:
-                self._connection.remove_subscription(node, member)
-                self.cmd_disconnect()
+            if callable(callback):
+                return callback()
         #
-        if callback is None:
-            callback = self.make_generic_callback(request_callback)
         method = "AddMatch" if remove is False else "RemoveMatch"
-        return self.do_send("DBus", method, callback, args=[match_rule])
+        return self.do_send("DBus", method, request_cb, args=[match_rule])
 
     def do_send(self, node, method, callback, args=None):
         r"""Call a method on a D-Bus object
@@ -1667,7 +1667,14 @@ class Signal(znc.Module):
         if self._connection.check_subscription("Signal", member):
             # XXX "await" here: must delete match rule before disconnecting.
             # "RemoveMatch" callback will resume procedure after this block.
-            return self.do_subscribe("Signal", "MessageReceived", remove=True)
+            def resume_disconnect_cb():
+                self._connection.remove_subscription("Signal", member)
+                msg = f"Cancelled D-Bus subscription for {member!r}"
+                self._connection.put_issuer(msg)
+                self.cmd_disconnect()
+            #
+            return self.do_subscribe("Signal", member, resume_disconnect_cb,
+                                     remove=True)
         try:
             self._connection.Close()
         except Exception:
