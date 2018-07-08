@@ -1105,8 +1105,9 @@ class Signal(znc.Module):
 
         return generic_callback
 
-    def do_subscribe(self, action=None):
-        """Not for general ("lowercase" signal) D-Bus subscriptions;
+    def do_subscribe(self, node, member, callback=None, remove=False):
+        """Add or remove a match rule
+        Not for general ("lowercase" signal) D-Bus subscriptions;
         this is hard-coded for ``Signal.*.MessageReceived`` only.
 
         Unsure whether it's necessary to call ``RemoveMatch`` before
@@ -1134,64 +1135,48 @@ class Signal(znc.Module):
            /blob/925d8db468ce39c0e2b164cc1ab464ea2edf4e86
            /src/main/java/org/asamk/Signal.java#L32
         """
-        # TODO explain "action" kwarg
-        # TODO convert this to a general D-Bus signal-subscription func to
-        # accommodate listening for NameAcquired, etc.
-        #
         try:
+            # Caller must ensure connection is actually up; this doesn't check
             assert self._connection.unique_name is not None, "Not connected"
         except AttributeError as exc:
             raise AssertionError from exc
-        # Caller must ensure connection is actually up (this doesn't check)
-        from jeepney.integrate.asyncio import Proxy
         from jeepney.bus_messages import MatchRule
-        from .jeepers import SignalMG, incoming_NT
-        proxy = Proxy(SignalMG(), self._connection)
+        from .jeepers import get_msggen
+        service = get_msggen(node)
         match_rule = MatchRule(type="signal",
-                               sender=proxy._msggen.bus_name,
-                               interface=proxy._msggen.interface,
-                               member="MessageReceived",
-                               path=proxy._msggen.object_path)
-        #
-        def subscription_callback(msg_body):  # noqa E306
-            assert isinstance(msg_body, tuple)
-            try:
-                self.handle_incoming(incoming_NT(*msg_body))
-            except Exception:
-                self.print_traceback()
+                               sender=service.bus_name,
+                               interface=service.interface,
+                               member=member,
+                               path=service.object_path)
         #
         def request_callback(result):  # noqa E306
+            msg = []
             if result != ():
-                msg = ("Problem with subscription request; "
-                       f"action: {action!r}, result: {result!r}")
+                msg.append("Problem with subscription request")
+            elif not hasattr(self, "_connection"):
+                msg.append("Connection missing")
+            elif self._connection.IsClosed():
+                msg.append("Connection unexpectedly closed")
+            if msg:
+                msg.extend(["remove: {remove!r}",
+                            "member: {member!r}",
+                            "result: {result!r}"])
                 try:
-                    raise RuntimeError(msg)
+                    raise RuntimeError("; ".join(msg))
                 except RuntimeError:
                     self.print_traceback()
                 return None
-            if (hasattr(self, "_connection")
-                    and not self._connection.IsClosed()):
-                self._connection._subscribed = action is None
-                put_func = self._connection.put_issuer
-            else:
-                put_func = self.put_pretty
-            put_func("Subscription successfully cancelled" if action else
-                     "Subscription request successful")
-            if action == "disconnect":
-                return self.cmd_disconnect()
+            fmt = "{} D-Bus subscription for {!r}"
+            msg = fmt.format("Cancelled" if remove else "Obtained", member)
+            self._connection.put_issuer(msg)
+            # Confusing: see cmd_disconnect below for reason (callback hell)
+            if remove:
+                self.cmd_disconnect()
         #
-        daemon_cb = self.make_generic_callback(request_callback)
-        self._connection.router.subscribe_signal(
-            callback=subscription_callback,
-            path=proxy._msggen.object_path,
-            interface=proxy._msggen.interface,
-            member="MessageReceived"
-        )
-        if action in ("remove", "disconnect"):  # <- likely useless
-            method = "RemoveMatch"
-        else:
-            method = "AddMatch"
-        return self.do_send("DBus", method, daemon_cb, args=[match_rule])
+        if callback is None:
+            callback = self.make_generic_callback(request_callback)
+        method = "AddMatch" if remove is False else "RemoveMatch"
+        return self.do_send("DBus", method, callback, args=[match_rule])
 
     def do_send(self, node, method, callback, args=None):
         r"""Call a method on a D-Bus object
@@ -1671,10 +1656,16 @@ class Signal(znc.Module):
             self.put_pretty("No existing connection")
             return
         elif self._connection.IsClosed():
+            if self.debug:
+                self.logger.debug("Removed latent connection object")
             del self._connection
             return
+        # This is likely superfluous: the message bus seems to remove match
+        # rules on :x.y name deletion
         if getattr(self._connection, "_subscribed", False):
-            return self.do_subscribe("disconnect")
+            # XXX "await" here: must delete match rule before disconnecting.
+            # "RemoveMatch" callback will resume procedure after this block.
+            return self.do_subscribe("Signal", "MessageReceived", remove=True)
         try:
             self._connection.Close()
         except Exception:

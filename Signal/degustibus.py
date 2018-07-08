@@ -41,10 +41,19 @@ class DBusConnection(znc.Socket):
 
     def _open_session(self):
         from jeepney.integrate.asyncio import Proxy
-        from jeepney.bus_messages import message_bus
+        from .jeepers import get_msggen
         #
-        bus = Proxy(message_bus, self)
+        bus = Proxy(get_msggen("DBus"), self)
         hello_reply = bus.Hello()
+
+        def sub_cb(msg_body):
+            if self.debug:
+                assert isinstance(msg_body, tuple)
+            from .jeepers import incoming_NT
+            try:
+                self.module.handle_incoming(incoming_NT(*msg_body))
+            except Exception:
+                self.module.print_traceback()
 
         def hello_cb(fut):
             if self.debug:
@@ -52,8 +61,13 @@ class DBusConnection(znc.Socket):
             self.unique_name = fut.result()[0]
             self.put_issuer("Session id is: %r. Ready." % self.unique_name)
             if self.module.config and self.module.config.settings["obey"]:
+                service = get_msggen("Signal")
                 try:
-                    self.module.do_subscribe()
+                    self.router.subscribe_signal(callback=sub_cb,
+                                                 path=service.object_path,
+                                                 interface=service.interface,
+                                                 member="MessageReceived")
+                    self.module.do_subscribe("Signal", "MessageReceived")
                 except Exception:
                     self.module.print_traceback()
 
