@@ -104,3 +104,21 @@ class FakeFuture(AsyncFuture):
 
     def __init__(self):
         super().__init__(loop=self.fake_loop)
+
+
+signal_service = SignalMG()
+
+
+def get_msggen(name):
+    """Return a MessageGenerator instance for D-Bus object <name>"""
+    if name == "Signal":
+        mg = signal_service
+    elif name == "DBus":
+        from jeepney.bus_messages import message_bus
+        mg = message_bus
+    elif name in ("Stats", "Monitoring"):
+        import jeepney.bus_messages as bm
+        mg = getattr(bm, name)()
+    else:
+        raise ValueError("Unable to determine target object")
+    return mg
