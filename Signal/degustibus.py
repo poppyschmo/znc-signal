@@ -142,7 +142,12 @@ class DBusConnection(znc.Socket):
     def OnShutdown(self):
         name = self.GetSockName()
         if self.debug:
-            self.logger.debug("%r shutting down" % name)
+            try:
+                self.logger.debug("%r shutting down" % name)
+            except ValueError as exc:
+                # Only occurs when disconnect teardown is interrupted
+                if "operation on closed file" not in repr(exc):
+                    raise
         for handler in self.logger.handlers:
             self.logger.removeHandler(handler)
         self.module.ListSockets()
