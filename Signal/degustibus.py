@@ -3,6 +3,7 @@
 
 from . import znc
 from . import get_logger
+from .jeepers import get_msggen
 
 
 class DBusConnection(znc.Socket):
@@ -14,6 +15,8 @@ class DBusConnection(znc.Socket):
         self.module = self.GetModule()
         self.debug = self.module.debug
         self.logger = get_logger(self.__class__.__name__)
+        # Well-known name (org.asamk.Signal) registered with message bus
+        self.has_service = False
         #
         self.__dict__.update(kwargs)
         self.unique_name = None
@@ -39,6 +42,50 @@ class DBusConnection(znc.Socket):
         self.authentication = FakeFuture()
         self.unique_name = None
 
+    def check_subscription(self, service_name=None, member=None):
+        """Check if a 'signal-received' callback has been registered
+
+        Without ``member``, return True if any subscriptions exist for
+        object described by ``service_name``.
+        """
+        if service_name is None:
+            return bool(self.router.signal_callbacks)
+        service = get_msggen(service_name)
+        if member:
+            key = (service.object_path, service.interface, member)
+            return key in self.router.signal_callbacks
+        else:
+            key = (service.object_path, service.interface)
+            return any(k[:-1] == key for k in self.router.signal_callbacks)
+
+    def remove_subscription(self, service_name=None, member=None):
+        """Remove a 'signal-received' callback
+
+        Without ``member``, remove all subscriptions registered to
+        object described by ``service_name``.
+        """
+        if service_name is None:
+            self.router.signal_callbacks.clear()
+            return
+        service = get_msggen(service_name)
+        if member:
+            key = (service.object_path, service.interface, member)
+            if key in self.router.signal_callbacks:
+                del self.router.signal_callbacks[key]
+        else:
+            key = (service.object_path, service.interface)
+            for k in tuple(self.router.signal_callbacks):
+                if k[:-1] == key:
+                    del self.router.signal_callbacks[k]
+
+    def add_subscription(self, service_name, member, callback):
+        """Add a 'signal-received' callback"""
+        service = get_msggen(service_name)
+        self.router.subscribe_signal(callback=callback,
+                                     path=service.object_path,
+                                     interface=service.interface,
+                                     member=member)
+
     def _open_session(self):
         from jeepney.integrate.asyncio import Proxy
         from .jeepers import get_msggen
@@ -61,12 +108,8 @@ class DBusConnection(znc.Socket):
             self.unique_name = fut.result()[0]
             self.put_issuer("Session id is: %r. Ready." % self.unique_name)
             if self.module.config and self.module.config.settings["obey"]:
-                service = get_msggen("Signal")
                 try:
-                    self.router.subscribe_signal(callback=sub_cb,
-                                                 path=service.object_path,
-                                                 interface=service.interface,
-                                                 member="MessageReceived")
+                    self.add_subscription("Signal", "MessageReceived", sub_cb)
                     self.module.do_subscribe("Signal", "MessageReceived")
                 except Exception:
                     self.module.print_traceback()

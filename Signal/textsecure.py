@@ -1171,6 +1171,7 @@ class Signal(znc.Module):
             self._connection.put_issuer(msg)
             # Confusing: see cmd_disconnect below for reason (callback hell)
             if remove:
+                self._connection.remove_subscription(node, member)
                 self.cmd_disconnect()
         #
         if callback is None:
@@ -1662,7 +1663,8 @@ class Signal(znc.Module):
             return
         # This is likely superfluous: the message bus seems to remove match
         # rules on :x.y name deletion
-        if getattr(self._connection, "_subscribed", False):
+        member = "MessageReceived"
+        if self._connection.check_subscription("Signal", member):
             # XXX "await" here: must delete match rule before disconnecting.
             # "RemoveMatch" callback will resume procedure after this block.
             return self.do_subscribe("Signal", "MessageReceived", remove=True)
