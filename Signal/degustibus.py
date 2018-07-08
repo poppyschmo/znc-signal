@@ -86,14 +86,15 @@ class DBusConnection(znc.Socket):
                                      interface=service.interface,
                                      member=member)
 
-    def _open_session(self):
-        from jeepney.integrate.asyncio import Proxy
-        from .jeepers import get_msggen
+    def subscribe_incoming(self):
+        """Register handler for incoming Signal messages"""
+        self.put_issuer("Signal service found")
+        self.has_service = True
         #
-        bus = Proxy(get_msggen("DBus"), self)
-        hello_reply = bus.Hello()
-
-        def sub_cb(msg_body):
+        if not self.module.config or not self.module.config.settings["obey"]:
+            return
+        #
+        def watch_message_received_cb(msg_body):  # noqa: E306
             if self.debug:
                 assert isinstance(msg_body, tuple)
             from .jeepers import incoming_NT
@@ -101,18 +102,78 @@ class DBusConnection(znc.Socket):
                 self.module.handle_incoming(incoming_NT(*msg_body))
             except Exception:
                 self.module.print_traceback()
+        #
+        def add_message_received_cb():  # noqa: E306
+            self.put_issuer("Subscribed to incoming Signal messages")
+            if self.debug:
+                self.logger.debug("Registering signal callback for "
+                                  "'MessageReceived' on 'Signal'")
+            self.add_subscription("Signal", "MessageReceived",
+                                  watch_message_received_cb)
+        #
+        if self.debug:
+            self.logger.debug("Adding match rule for 'MessageReceived'")
+        try:
+            self.module.do_subscribe("Signal", "MessageReceived",
+                                     add_message_received_cb)
+        except Exception:
+            self.module.print_traceback()
+
+    def ensure_service(self):
+        """Query message bus for Signal service, act accordingly
+
+        For now, this just waits for an announcement of `name
+        acquisition`__, then resumes the normal subscription sequence.
+
+        .. __: https://dbus.freedesktop.org/doc/dbus-specification.html
+           #bus-messages-name-owner-changed
+        """
+        service_name = get_msggen("Signal").bus_name
+        member = "NameOwnerChanged"
+        #
+        def watch_name_acquired_cb(msg_body):  # noqa: E306
+            if self.debug:
+                assert type(msg_body) is tuple
+                assert len(msg_body) == 3
+                assert all(type(s) is str for s in msg_body)
+            if msg_body[0] == service_name:
+                self.remove_subscription("DBus", member)
+                self.subscribe_incoming()
+        #
+        def add_name_owner_changed_cb():  # noqa: E306
+            if self.debug:
+                self.logger.debug("Registering signal callback for "
+                                  f"{member} on 'DBus'")
+            self.add_subscription("DBus", member, watch_name_acquired_cb)
+        #
+        def name_has_owner_cb(result):  # noqa: E306
+            if self.debug:
+                assert type(result) is int
+            if result:
+                self.subscribe_incoming()
+            else:
+                self.put_issuer("Waiting for Signal service...")
+                self.module.do_subscribe("DBus", member,
+                                         add_name_owner_changed_cb)
+        #
+        wrapped = self.module.make_generic_callback(name_has_owner_cb)
+        self.module.do_send("DBus", "NameHasOwner", wrapped,
+                            args=(service_name,))
+
+    def _open_session(self):
+        from jeepney.integrate.asyncio import Proxy
+        from .jeepers import get_msggen
+        #
+        bus = Proxy(get_msggen("DBus"), self)
+        hello_reply = bus.Hello()
 
         def hello_cb(fut):
             if self.debug:
                 self.logger.debug("Got hello reply: %r" % fut)
             self.unique_name = fut.result()[0]
-            self.put_issuer("Session id is: %r. Ready." % self.unique_name)
-            if self.module.config and self.module.config.settings["obey"]:
-                try:
-                    self.add_subscription("Signal", "MessageReceived", sub_cb)
-                    self.module.do_subscribe("Signal", "MessageReceived")
-                except Exception:
-                    self.module.print_traceback()
+            self.put_issuer("Registered with message bus; session id is: %r" %
+                            self.unique_name)
+            self.ensure_service()
 
         if self.debug:
             self.logger.debug("Waiting for hello reply: %r" % hello_reply)
@@ -125,7 +186,8 @@ class DBusConnection(znc.Socket):
         self.authentication.set_result(True)
         self.data_received = self.data_received_post_auth
         self.data_received(self.auth_parser.buffer)
-        self.put_issuer("D-Bus connection authenticated")
+        if self.debug:
+            self.logger.debug("D-Bus connection authenticated")
         self._open_session()
 
     def data_received(self, data):
