@@ -1194,55 +1194,47 @@ class Signal(znc.Module):
         return self.do_send("DBus", method, daemon_cb, args=[match_rule])
 
     def do_send(self, node, method, callback, args=None):
-        r"""An extremely limited dbus-send_(1) analog
+        r"""Call a method on a D-Bus object
 
-        <node>     a key from the address book below: str
-        <method>   leaf member (no interface components): str
-        <callback> callable(fut: asyncio.Future) -> void
-        [<args>]   iterable
+        For now, the interface is inferred from object/member context.
 
-        In practice, the address book is really only needed by
-        ``Introspectable``. Unless the primary DBus system config grants
-        all permissions and anon auth to TCP supplicants, calls to
-        ``Monitoring`` and ``Stats`` nodes will likely be denied,
-        generating: ``org.freedesktop.DBus.Error.AccessDenied``.
-        Unfortunately, this means messing with it by hand from the host
-        machine::
+        ``node``
+            String: destination object
 
-            ># docker exec signal.ops.example.com \
+        ``method``
+            String: leaf member (no interface components)
+
+        ``callback``
+            Callable: takes a single arg, an ``asyncio.Future``
+            instance, and returns nothing
+
+        ``[<args>]``
+            An iterable
+
+        Unless the system config grants special access to TCP
+        connections, calls to ``Monitoring`` and ``Stats`` nodes will
+        be denied, generating: ``Error.AccessDenied``. Local access
+        should always work::
+
+            ># docker exec my_container \
                     dbus-send --system --print-reply \
                     --type=method_call \
                     --dest=org.freedesktop.DBus \
                     /org/freedesktop/DBus \
                     org.freedesktop.DBus.Debug.Stats.GetAllMatchRules
 
-        .. _dbus-send: https://dbus.freedesktop.org/doc/dbus-send.1.html
         """
-        from jeepney.integrate.asyncio import Proxy
-        # TODO make this a namedtuple in jeepers mod so other funcs can use
-        addresses = {
-            "Signal": ("org.asamk.Signal", "/org/asamk/Signal"),
-            "DBus": ('org.freedesktop.DBus', '/org/freedesktop/DBus'),
-            "Monitoring": ('org.freedesktop.DBus', '/org/freedesktop/DBus'),
-            "Stats": ('org.freedesktop.DBus', '/org/freedesktop/DBus'),
-        }
+        #
+        from .jeepers import get_msggen
+        service = get_msggen(node)
         args = args or ()
-        # Stands apart because called on other nodes
+        from jeepney.integrate.asyncio import Proxy
+        # Stands apart because called on other objects
         if method == "Introspect":
             from jeepney.wrappers import Introspectable as IntrospectableMG
-            dest, path = addresses[node]
-            proxy = Proxy(IntrospectableMG(object_path=path, bus_name=dest),
-                          self._connection)
-        elif node in addresses:
-            if node != "Signal":
-                import jeepney.bus_messages as bm
-                MG = getattr(bm, node)
-                proxy = Proxy(MG(), self._connection)
-            else:
-                from .jeepers import SignalMG
-                proxy = Proxy(SignalMG(), self._connection)
-        else:
-            raise ValueError("Unable to determine destination")
+            service = IntrospectableMG(object_path=service.object_path,
+                                       bus_name=service.bus_name)
+        proxy = Proxy(service, self._connection)
         try:
             getattr(proxy, method)(*args).add_done_callback(callback)
         except AttributeError:
