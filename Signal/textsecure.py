@@ -1078,6 +1078,7 @@ class Signal(znc.Module):
             else:
                 # TODO see if it's possible to impersonate the client-side of a
                 # query for playback (this is kind of sad)
+                # See <http://defs.ircdocs.horse/info/selfmessages.html>
                 fmt = (f":{target}!Signal@znc.in PRIVMSG {target} "
                        f":<\x02{source}\x02> {{text}}")
                 found = session["network"].FindQuery(target)

@@ -37,7 +37,7 @@ class DBusConnection(znc.Socket):
         if self.debug:
             def on_unhandled(msg):
                 self.logger.debug("Unhandled msg: {}".format(msg))
-
+            #
             self.router.on_unhandled = on_unhandled
         self.authentication = FakeFuture()
         self.unique_name = None
@@ -206,26 +206,42 @@ class DBusConnection(znc.Socket):
             else:
                 self.auth_parser.error = self.auth_parser.rejected
 
+    def debug_format_msg(self, msg):
+        from .ootil import OrderedPrettyPrinter as OrdPP
+        from jeepney.low_level import Message
+        if not hasattr(self, "_opp"):
+            self._opp = OrdPP(width=72)
+        if not isinstance(msg, Message):
+            return self._opp.pformat(msg)
+        header = msg.header
+        data = {"header": (header.endianness, header.message_type,
+                           dict(flags=header.flags,
+                                version=header.protocol_version,
+                                length=header.body_length,
+                                serial=header.serial,),
+                           {"fields": header.fields}),
+                "body": msg.body}
+        return self._opp.pformat(data)
+
     def data_received_post_auth(self, data):
         if self.debug:
-            self.logger.debug("self.router.awaiting_reply: {}"
-                              .format(self.router.awaiting_reply))
+            log_fut = self.debug_format_msg(repr(self.router.awaiting_reply))
+            self.logger.debug(f"{log_fut}")
         for msg in self.parser.feed(data):
             if self.debug:
-                self.logger.debug("data_received() - msg: {}"
-                                  .format(msg))
+                log_msg = self.debug_format_msg(msg)
+                self.logger.debug(f"\n{log_msg}")
             self.router.incoming(msg)
 
     def send_message(self, message):
         if not self.authentication.done():
-            raise RuntimeError(
-                "Wait for authentication before sending messages"
-            )
+            # TODO remove if unable to trigger this
+            raise RuntimeError("Wait for authentication before sending "
+                               "messages")
         future = self.router.outgoing(message)
         if self.debug:
-            self.logger.debug("self.router.awaiting_reply: {}"
-                              .format(self.router.awaiting_reply))
-            self.logger.debug("send_message: {}".format(message))
+            log_msg = self.debug_format_msg(message)
+            self.logger.debug(f"{self.router.awaiting_reply}\n{log_msg}")
         data = message.serialise()
         self.WriteBytes(data)
         return future
