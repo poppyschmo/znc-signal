@@ -227,16 +227,18 @@ ordering/priority). Also collect and consolidate general questions involving
 fundamental ZNC and/or SWIG behavior. Possibly do the same for IRC/RFC related
 stuff. Add simple, reproducible examples.
 
-1. Wait for signal-cli to acquire a name from the message bus, and send
-   progress updates to the invoking client. Currently, newly spawned
-   containers are encumbered by a significant startup delay (at times
-   approaching near limbo). This issue is currently being investigated.
-
-2. Remove all hook-inspection and interception from the main module. (Perhaps
+1. Remove all hook-inspection and interception from the main module. (Perhaps
    create a dedicated "learning" module for this purpose.) Explicitly define
    all `On*`-style hook methods for easier maintenance and sharing.
 
-3. File upstream bug reports where warranted.
+2. File upstream bug reports where warranted.
+
+3. Investigate the signal-cli "startup delay" issue. Description: the process
+   lies dormant for up to 30 minutes before connecting to the message bus;
+   it's also delayed in recognizing the first message, incoming or outgoing.
+   Search upstream for relevant discussions/activity; perhaps create a DSL or
+   shell script demonstrating the issue in a reproducible way. Use a debugger
+   or system-call inspector to hunt for clues.
 
 4. Integrate signal-cli 0.6.0 features
    1. Employ receipt subscription and acknowledgment
