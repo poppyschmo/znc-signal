@@ -14,7 +14,7 @@ def test_initialize_all():
     assert all(hasattr(a, "p") for a in apwrights)
     assert not any(getattr(a, "p", None) for a in apwrights)
     #
-    initialize_all(update=dict(data_dir="/tmp/baz"))
+    initialize_all(update=dict(datadir="/tmp/baz"))
     assert all(a.p for a in apwrights)
     assert "/tmp/baz" in apwrights.update.p.format_help()
     #
@@ -65,15 +65,15 @@ def test_apwrights():
     """.split()  # apwrights is populated at import time
     #
     # Calling with kwargs updates partialized bindings
-    apwrights.update(data_dir="/tmp/foo")
+    apwrights.update(datadir="/tmp/foo")
     assert "/tmp/foo" in apwrights.update.p.format_help()
     apwrights.update()
     assert "/tmp/foo" in apwrights.update.p.format_help()
     assert apwrights.update.p.format_help().count("/tmp/foo") == 1
-    apwrights.update(data_dir="/tmp/bar")
+    apwrights.update(datadir="/tmp/bar")
     assert "/tmp/foo" not in apwrights.update.p.format_help()
     assert "/tmp/bar" in apwrights.update.p.format_help()
-    assert apwrights.update.kwargs["data_dir"] == "/tmp/bar"
+    assert apwrights.update.kwargs["datadir"] == "/tmp/bar"
     apwrights.update.p = None
     #
     # Epilog patch is idempotent

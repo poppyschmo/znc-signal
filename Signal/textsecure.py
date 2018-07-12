@@ -10,7 +10,7 @@ class Signal(znc.Module):
     args_help_text = "DATADIR=<path> DEBUG=<bool> LOGFILE=<path>"
     has_args = True
     znc_version = None  # tuple, e.g. 1.7.0-rc1 -> (1, 7, 0)
-    data_dir = None     # str, $DATADIR or path from CModule::GetSavePath()
+    datadir = None      # str, $DATADIR or path from CModule::GetSavePath()
     env = None          # dict, copy of environ w. SIGNALMOD_ prefixes dropped
     tz = None           # datetime.timezone
     config = None       # config_NT, members are BaseConfigDict subclasses
@@ -756,7 +756,7 @@ class Signal(znc.Module):
         self.log_old_hooks = bools.get(self.env.get("_OLD_HOOKS",
                                                     "0").lower(), False)
         #
-        self.data_dir = self.env.get("DATADIR") or self.GetSavePath()
+        self.datadir = self.env.get("DATADIR") or self.GetSavePath()
         #
         msg = []
         msg.append(f"Args: {self.args_help_text}")
@@ -767,11 +767,11 @@ class Signal(znc.Module):
         # among all submodules.
         from . import get_logger
         if self.debug:
-            assert os.path.exists(self.data_dir)
+            assert os.path.exists(self.datadir)
             msg[-1] += "; or pass as env vars prefixed with SIGNALMOD_"
             logfile = self.env.get("LOGFILE")
             if not logfile:
-                logfile = os.path.join(self.data_dir, "signal.log")
+                logfile = os.path.join(self.datadir, "signal.log")
                 msg.append("\x02Warning: DEBUG mode is useless without LOGFILE"
                            "; setting to %r, but will not rotate/truncate; "
                            "Consider a pty instead\x02" % logfile)
@@ -788,7 +788,7 @@ class Signal(znc.Module):
             BaseConfigDict.debug = True
         #
         from .cmdopts import initialize_all, AllParsed
-        initialize_all(self.debug, update=dict(data_dir=self.data_dir))
+        initialize_all(self.debug, update=dict(datadir=self.datadir))
         self.approx = AllParsed(debug=self.debug)
         #
         self.mod_commands = {c: getattr(self, c) for c in self.approx(True)}
@@ -831,7 +831,7 @@ class Signal(znc.Module):
             if self.config:
                 import os
                 version = self.config.settings["config_version"]
-                path = os.path.join(self.data_dir, f"config.{version}.ini.bak")
+                path = os.path.join(self.datadir, f"config.{version}.ini.bak")
                 self.manage_config("export", force=True, path=path)
             else:
                 self.manage_config("export", force=True, as_json=True)
@@ -1217,7 +1217,7 @@ class Signal(znc.Module):
                     elif not any(path.endswith(e) for e in (".json", ".ini")):
                         path = os.path.join(parpath, f"config.{ext}")
             if not path:
-                path = os.path.join(self.data_dir, f"config.{ext}")
+                path = os.path.join(self.datadir, f"config.{ext}")
             return path
         #
         # save/export

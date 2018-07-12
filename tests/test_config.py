@@ -882,15 +882,15 @@ def test_manage_config(signal_stub_debug):
     with pytest.raises(FileNotFoundError) as exc_info:
         sig.manage_config("reload")
     assert exc_info.value.args[0] == \
-        f"No config found at {sig.data_dir}/config.ini"
+        f"No config found at {sig.datadir}/config.ini"
     # Looks for .json if requested
     with pytest.raises(FileNotFoundError) as exc_info:
         sig.manage_config("reload", as_json=True)
     assert exc_info.value.args[0] == \
-        f"No config found at {sig.data_dir}/config.json"
+        f"No config found at {sig.datadir}/config.json"
     # Note: for simplicty, "reload" is used instead of "export"; exceptions are
     # always raised because files don't actually exist
-    foo_path = os.path.join(sig.data_dir, "foo")
+    foo_path = os.path.join(sig.datadir, "foo")
     # Dir passed as path
     os.makedirs(foo_path)
     with pytest.raises(FileNotFoundError) as exc_info:
@@ -911,10 +911,10 @@ def test_manage_config(signal_stub_debug):
     # Export non-empty config
     assert sig.config is not None
     assert sig.nv[UN] == some_backup
-    assert not os.path.exists(os.path.join(sig.data_dir, "config.ini"))
+    assert not os.path.exists(os.path.join(sig.datadir, "config.ini"))
     sig.manage_config("export")
     assert not sig._read()  # no errors
-    assert os.path.exists(os.path.join(sig.data_dir, "config.ini"))
+    assert os.path.exists(os.path.join(sig.datadir, "config.ini"))
     sig.config = None
     del sig.nv[UN]
     sig.manage_config("reload")
@@ -928,7 +928,7 @@ def test_manage_config(signal_stub_debug):
         sig.manage_config("export")
     #
     # Reload previously exported file from explicit, non-default path
-    os.rename(os.path.join(sig.data_dir, "config.ini"),
+    os.rename(os.path.join(sig.datadir, "config.ini"),
               os.path.join(foo_path, "config.ini"))
     sig.manage_config("reload", path=os.path.join(foo_path, "config.ini"))
     assert sig.nv[UN] == some_backup
@@ -936,10 +936,10 @@ def test_manage_config(signal_stub_debug):
     # Export json version to default path
     assert "config_version" not in sig.config.settings.maps[0]
     sig.manage_config("export", as_json=True)
-    assert os.path.exists(os.path.join(sig.data_dir, "config.json"))
+    assert os.path.exists(os.path.join(sig.datadir, "config.json"))
     import json
     # Version always saved, even though absent from user config
-    with open(os.path.join(sig.data_dir, "config.json")) as flo:
+    with open(os.path.join(sig.datadir, "config.json")) as flo:
         json_exported = json.load(flo)
     assert "config_version" in json_exported["settings"]
     sig.config = None
@@ -988,18 +988,18 @@ def test_manage_config(signal_stub_debug):
         assert f"config_version = {curver}" in flo.read()
     #
     # Reload outdated config version as json
-    with open(os.path.join(sig.data_dir, "config.json")) as flor:
+    with open(os.path.join(sig.datadir, "config.json")) as flor:
         old = flor.read()
     new = old.replace(f'"config_version": {curver}',
                       '"config_version": 0.1')
     assert new != old
-    with open(os.path.join(sig.data_dir, "config.json"), "w") as flow:
+    with open(os.path.join(sig.datadir, "config.json"), "w") as flow:
         flow.write(new)
     with pytest.raises(UserWarning) as exc_info:
         sig.manage_config("reload", as_json=True,
-                          path=os.path.join(sig.data_dir, "config.json"))
+                          path=os.path.join(sig.datadir, "config.json"))
     assert ("Your config appears to be outdated. Please update it" in
             exc_info.value.args[0])
     assert not sig._read()  # no other errors
-    with open(os.path.join(sig.data_dir, "config.json.new")) as flo:
+    with open(os.path.join(sig.datadir, "config.json.new")) as flo:
         assert f'"config_version": {curver}' in flo.read()

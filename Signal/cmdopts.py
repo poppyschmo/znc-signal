@@ -353,10 +353,10 @@ def cmd_select():
 
 
 @mando
-def cmd_update(data_dir=None):
-    data_dir = data_dir or ""
-    if data_dir:
-        data_dir = f"\n\nData directory:\n  {data_dir!r}"
+def cmd_update(datadir=None):
+    datadir = datadir or ""
+    if datadir:
+        datadir = f"\n\nData directory:\n  {datadir!r}"
     p = argparse.ArgumentParser(
         prog="update",
         description="Modify a config entry",
@@ -364,8 +364,8 @@ def cmd_update(data_dir=None):
         epilog=dedent("""
             This command does not allow making wholesale changes to / (root).
             Either invoke it separately per main category or edit the config
-            file directly and reload.{data_dir}
-        """).format(data_dir=data_dir)
+            file directly and reload.{datadir}
+        """).format(datadir=datadir)
     )
     cu_meg = p.add_mutually_exclusive_group()
     cu_meg.add_argument(
