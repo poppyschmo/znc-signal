@@ -25,7 +25,7 @@ class DBusConnection(znc.Socket):
         make_auth_anonymous.ALLOW = True
         self.auth_parser = SASLParser()
         #
-        from jeepney.low_level import Parser
+        from jeepney.low_level import Parser, HeaderFields
         self.parser = Parser()
         #
         from .jeepers import FakeFuture, FakeLoop
@@ -36,7 +36,13 @@ class DBusConnection(znc.Socket):
         #
         if self.debug:
             def on_unhandled(msg):
-                self.logger.debug("Unhandled msg: {}".format(msg))
+                member = msg.header.fields[HeaderFields.member]
+                if member == "NameAcquired":
+                    # This fires before the "Hello" reply callback
+                    log_msg = f"Received routine opening signal: {member!r}; "
+                else:
+                    log_msg = "See 'data_received' entry above for contents"
+                self.logger.debug(log_msg)
             #
             self.router.on_unhandled = on_unhandled
         self.authentication = FakeFuture()
@@ -138,7 +144,15 @@ class DBusConnection(znc.Socket):
                 assert all(type(s) is str for s in msg_body)
             if msg_body[0] == service_name:
                 self.remove_subscription("DBus", member)
-                self.subscribe_incoming()
+                self.module.do_subscribe("DBus", member,
+                                         remove_name_owner_changed_cb,
+                                         remove=True)
+        #
+        def remove_name_owner_changed_cb():  # noqa: E306
+            if self.debug:
+                self.logger.debug("Cancelled subscription for "
+                                  f"{member} on 'DBus'")
+            self.subscribe_incoming()
         #
         def add_name_owner_changed_cb():  # noqa: E306
             if self.debug:
@@ -206,7 +220,7 @@ class DBusConnection(znc.Socket):
             else:
                 self.auth_parser.error = self.auth_parser.rejected
 
-    def debug_format_msg(self, msg):
+    def format_debug_msg(self, msg):
         from .ootil import OrderedPrettyPrinter as OrdPP
         from jeepney.low_level import Message
         if not hasattr(self, "_opp"):
@@ -219,19 +233,21 @@ class DBusConnection(znc.Socket):
                                 version=header.protocol_version,
                                 length=header.body_length,
                                 serial=header.serial,),
-                           {"fields": header.fields}),
+                           {"fields": {k.name: v for
+                                       k, v in header.fields.items()}}),
                 "body": msg.body}
         return self._opp.pformat(data)
 
     def data_received_post_auth(self, data):
         if self.debug:
-            log_fut = self.debug_format_msg(repr(self.router.awaiting_reply))
-            self.logger.debug(f"{log_fut}")
+            num_futs = len(self.router.awaiting_reply)
+            log_msg = [f"Futures awaiting reply: {num_futs}"]
         for msg in self.parser.feed(data):
-            if self.debug:
-                log_msg = self.debug_format_msg(msg)
-                self.logger.debug(f"\n{log_msg}")
             self.router.incoming(msg)
+            if self.debug:
+                log_msg.append(self.format_debug_msg(msg))
+        if self.debug:
+            self.logger.debug("\n".join(log_msg))
 
     def send_message(self, message):
         if not self.authentication.done():
@@ -239,10 +255,14 @@ class DBusConnection(znc.Socket):
             raise RuntimeError("Wait for authentication before sending "
                                "messages")
         future = self.router.outgoing(message)
-        if self.debug:
-            log_msg = self.debug_format_msg(message)
-            self.logger.debug(f"{self.router.awaiting_reply}\n{log_msg}")
         data = message.serialise()
+        # Logging must happen here, after:
+        #   1. Router increments serial cookie
+        #   2. Message.serialize() updates the header w. correct body length
+        if self.debug:
+            num_futs = len(self.router.awaiting_reply)
+            log_msg = self.format_debug_msg(message)
+            self.logger.debug(f"Futures awaiting reply: {num_futs}\n{log_msg}")
         self.WriteBytes(data)
         return future
 
