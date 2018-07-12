@@ -108,6 +108,6 @@ if hasattr(znc, "CMessage"):  # helpers for CMessage in 1.7.0-rc1
     )
 
 
-from .ootil import get_logger  # noqa E402
-get_logger.LOGFILE = None
+from .ootil import GetLogger  # noqa E402
+get_logger = GetLogger()
 from .textsecure import Signal  # noqa E402

@@ -50,12 +50,8 @@ ordered_reprlib._possibly_sorted = _possibly_sorted
 OrderedRepr = ordered_reprlib.Repr
 
 
-def get_logger(name, level=None, logfile=None, loop=None):
-    """Attach a common handler to a default logger
-
-    Optional function attributes
-        LOGFILE : file-like-object (io.IOBase)
-        handler_name : str
+class GetLogger:
+    """Attach a single, common handler to the default logger
 
     Note: not sure why, but the (built-in) asyncio logging facility is
     only reliably enabled when the asyncio module has already been
@@ -63,8 +59,10 @@ def get_logger(name, level=None, logfile=None, loop=None):
     ::
         >>> import asyncio
         >>> import io
+        >>> get_logger = GetLogger()
         >>> cap = io.StringIO()
-        >>> get_logger("asyncio", "DEBUG", cap)
+        >>> get_logger.LOGFILE = cap
+        >>> get_logger("asyncio", "DEBUG")
         <Logger asyncio (DEBUG)>
         >>> async def bar():
         ...     pass
@@ -81,56 +79,168 @@ def get_logger(name, level=None, logfile=None, loop=None):
         True
         >>> cap.close()
     """
-    # TODO: Add exit handler or context manager (for main() or exe).
-    #
-    # NOTE re func attrs: ugly for sure, but would otherwise have to nest
-    # LOGFILE in another global to spare caller from having to import this
-    # module's namespace just to update LOGFILE. Could also change this func
-    # to a class or use env vars.
-    LOGFILE = getattr(get_logger, "LOGFILE", None)
-    #
-    if logfile is None:
-        if LOGFILE is None:
-            return logging.getLogger(name)
-        else:
-            logfile = LOGFILE
-    #
-    if level is not None:
-        if isinstance(level, int):
-            level = logging.getLevelName(level)
-        assert hasattr(logging, level)
-    else:
-        level = "DEBUG"
-    #
-    logger = logging.getLogger(name)
-    if name == "asyncio":
-        if loop is None:
-            from asyncio import get_event_loop
-            loop = get_event_loop()
-        loop.set_debug(1)
-        logging.captureWarnings(True)
-    #
-    handler_name = getattr(get_logger, "handler_name",
-                           "get_logger.LOGFILE (DEBUG)")
-    if any(h.get_name() == handler_name for h in logger.handlers):
-        return logger
-    #
-    escapes = dict(dark="", dim="", norm="")
-    if logfile.isatty():
+    LEVEL = "DEBUG"
+    LOGFILE = None
+    LOOP = None
+    HANDLER_NAME_FMT = "{name} (DEBUG)"
+    HANDLER_NAME = None
+    FORMAT = ("{dark}[%(asctime)s]{norm} {dim}%(name)s"
+              ".%(funcName)s:{norm} %(message)s")
+    names = None
+
+    def __init__(self, level=None, logfile=None, handler_name=None, loop=None):
+        self.LOGFILE = logfile
+        self.LOOP = loop
+        self.LEVEL = level or self.LEVEL
+        self.HANDLER_NAME = handler_name
+        self._handler = self._formatter = None
+        self.names = []  # list instead of set, so dupes can be detected
+
+    @property
+    def escapes(self):
         # Assume 256-color term w. dark bg (v-console shouldn't explode)
-        escapes.update(dark="\x1b[38;5;241m",
-                       dim="\x1b[38;5;247m",
-                       norm="\x1b[m")
-    fmt = ("{dark}[%(asctime)s]{norm} {dim}%(name)s"
-           ".%(funcName)s:{norm} %(message)s")
-    formatter = logging.Formatter(fmt.format(**escapes))
-    handler = logging.StreamHandler(stream=logfile)
-    handler.set_name(handler_name)
-    handler.setLevel(level)
-    handler.setFormatter(formatter)
-    logger.addHandler(handler)
-    logger.setLevel(level)  # str or int
-    return logger
+        if self.LOGFILE and self.LOGFILE.isatty():
+            return dict(dark="\x1b[38;5;241m",
+                        dim="\x1b[38;5;247m",
+                        norm="\x1b[m")
+        else:
+            return dict(dark="", dim="", norm="")
+
+    @property
+    def formatter(self):
+        if self._formatter is not None:
+            return self._formatter
+        self._formatter = logging.Formatter(self.FORMAT.format(**self.escapes))
+        return self._formatter
+
+    @property
+    def handler(self):
+        if self._handler is not None:
+            self.block_till_ready()
+            return self._handler
+        if self.LOGFILE.isatty():
+            self._handler = logging.StreamHandler(stream=self.LOGFILE)
+        else:
+            self.LOGFILE.close()
+            self._handler = logging.FileHandler(self.LOGFILE.name)
+            self.LOGFILE = self._handler.stream
+        self._handler.set_name(self.HANDLER_NAME)
+        self._handler.setLevel(self.LEVEL)
+        self._handler.setFormatter(self.formatter)
+        self.block_till_ready()
+        return self._handler
+
+    def __call__(self, name, level=None):
+        """Return the default logger
+
+        This should only be called if ``logging.getLogger`` isn't doing
+        the right thing.
+        """
+        #
+        logger = logging.getLogger(name)
+        #
+        if self.LOGFILE is None or name in self.names:
+            return logger
+        #
+        handler_name = self.HANDLER_NAME_FMT.format(name=self.LOGFILE.name)
+        if self.HANDLER_NAME:
+            if self.HANDLER_NAME != handler_name:
+                raise RuntimeError("This only supports a single handler.")
+        else:
+            self.HANDLER_NAME = handler_name
+        #
+        self.names.append(name)
+        #
+        if any(h.name == handler_name for h in logger.handlers):
+            return logger
+        #
+        if name == "asyncio":
+            loop = self.LOOP
+            if loop is None:
+                from asyncio import get_event_loop
+                loop = get_event_loop()
+            loop.set_debug(1)
+            logging.captureWarnings(True)
+        #
+        if level is not None:
+            if isinstance(level, int):
+                level = logging.getLevelName(level)
+            assert hasattr(logging, level)
+        else:
+            level = self.LEVEL
+        #
+        logger.addHandler(self.handler)
+        logger.setLevel(level)  # str or int
+        return logger
+
+    def clear(self):
+        """Sequence to close handler and remove local reference
+
+        This enables the logfile to be changed between reloads but
+        copies of the old one may still be open elsewhere.
+
+        ``logging.shutdown()`` is registered with ``atexit`` on import,
+        but running those callbacks would mess with all other modules
+        using logging.
+        """
+        #
+        if not self.names or not self.HANDLER_NAME:
+            return
+        logging._acquireLock()
+        try:
+            for name in self.names[:]:
+                logger = logging.getLogger(name)
+                # Can't use logging.shutdown; it wants a list of weakrefs
+                assert self._handler in logger.handlers
+                logger.removeHandler(self._handler)
+                self.names.remove(name)
+                del logger.manager.loggerDict[name]
+            if isinstance(self._handler, logging.FileHandler):
+                self._handler.close()
+            else:
+                if hasattr(self._handler.stream, "flush"):
+                    self._handler.stream.flush()
+                self._handler.stream.close()
+            if not self.LOGFILE.closed:
+                raise RuntimeError(f"Could not close {self.LOGFILE}")
+            if self.names:
+                raise Warning(f"Unknown loggers found: {self.names}")
+            self.__init__()
+        finally:
+            logging._releaseLock()
+
+    def block_till_ready(self):
+        # TODO ensure this still applies; this was moved from the main init
+        # hook, but may no longer make sense. Formerly observed behavior:
+        #
+        #   The first few writes to LOGFILE are blackholed when reloading
+        #   (unless modpython is also reloaded). This seems to force its hand
+        #   (at least on Linux w. ZNC 1.6.6).
+        #
+        import os
+        from io import TextIOWrapper
+        if (not os.sys.platform.startswith("linux") or not
+                hasattr(self._handler, "stream") or not
+                isinstance(self._handler.stream, TextIOWrapper)):
+            return
+        try:
+            self._handler.flush()
+        except ValueError:
+            # Stale handlers may linger if ZNC recently crashed
+            assert self._handler.stream.closed
+            self._handler = None
+            raise
+        import select
+        poll = select.poll()
+        poll.register(self._handler.stream.fileno())
+        maxtries = 10000
+        while maxtries:
+            for tup in poll.poll(0):
+                fd, event = tup
+                if select.POLLOUT & event:
+                    return
+            maxtries -= 1
+        raise RuntimeError(f"Timed out waiting for I/O on {self.LOGFILE!r}")
 
 
 def get_tz():

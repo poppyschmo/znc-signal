@@ -2,7 +2,6 @@
 # licensed under Apache 2.0 <http://www.apache.org/licenses/LICENSE-2.0>.
 
 from . import znc
-from . import get_logger
 
 
 class Signal(znc.Module):
@@ -762,11 +761,14 @@ class Signal(znc.Module):
         msg = []
         msg.append(f"Args: {self.args_help_text}")
         #
+        # Although get_logger is created in __init__.py, importing it in file
+        # scope (i.e., at import time) creates a duplicate belonging to this
+        # (python) module. We want the root-level package instance to be shared
+        # among all submodules.
+        from . import get_logger
         if self.debug:
             assert os.path.exists(self.data_dir)
             msg[-1] += "; or pass as env vars prefixed with SIGNALMOD_"
-            # TODO update jeepney's ``get_logger`` (tcp_fork:debug branch) with
-            # LOGFILE, if provided.
             logfile = self.env.get("LOGFILE")
             if not logfile:
                 logfile = os.path.join(self.data_dir, "signal.log")
@@ -774,68 +776,8 @@ class Signal(znc.Module):
                            "; setting to %r, but will not rotate/truncate; "
                            "Consider a pty instead\x02" % logfile)
                 self.env["LOGFILE"] = logfile
-            try:
-                get_logger.LOGFILE = open(logfile, "w")
-            except PermissionError:
-                # Perhaps better to simply die here instead.
-                msg.append(f"\x02Warning: unable to write to {logfile}\x02")
-                if not znc.CDebug_Debug():
-                    msg.append("\x02Run ZNC in debug mode for more info\x02")
-                self.print_traceback(where=os.sys.stderr)
-                get_logger.LOGFILE = None  # effectively neuters
-                if "LOGFILE" in self.env:
-                    del self.env["LOGFILE"]
-            else:
-                # TODO find way to tell if isatty without/before opening
-                try:
-                    if not get_logger.LOGFILE.isatty():
-                        if os.sys.platform.startswith("linux"):
-                            from fcntl import fcntl, F_GETFL, F_SETFL
-                            # Some may be ignored: e.g., O_LARGEFILE
-                            status_flags = fcntl(get_logger.LOGFILE, F_GETFL)
-                            fcntl(get_logger.LOGFILE, F_SETFL,
-                                  status_flags | os.O_APPEND)
-                            get_logger.LOGFILE.mode = "a"
-                        # Seems to worsen missing-records issue (see below)
-                        else:
-                            get_logger.LOGFILE.close()
-                            get_logger.LOGFILE = open(logfile, "a")
-                except Exception:
-                    self.print_traceback(where=os.sys.stderr)
-                    raise
-                import atexit
-                atexit.register(lambda flo: flo.close(), get_logger.LOGFILE)
+            get_logger.LOGFILE = open(logfile, "w")
         self.logger = get_logger(self.__class__.__name__)
-        # The first few writes to LOGFILE are blackholed when reloading (unless
-        # modpython is also reloaded). This seems to force its hand (at least
-        # on Linux w. ZNC 1.6.6). Problem only affects writes to "disk files"
-        # (also tmpfs), which already suffer fits and starts.
-        # TODO See if API offers delegating all file io through some central
-        # selector/manager. A cursory glance at source files suggests no.
-        if os.sys.platform.startswith("linux"):
-            poll = None
-            fds = []
-            for handler in self.logger.handlers:
-                try:
-                    handler.flush()
-                except (ValueError, OSError):
-                    # Stale handlers may linger if ZNC recently crashed
-                    self.print_traceback(where=os.sys.stderr)
-                    self.logger.removeHandler(handler)
-                else:
-                    if hasattr(handler, "stream"):
-                        if poll is None:
-                            import select
-                            poll = select.poll()
-                        fd = handler.stream.fileno()
-                        fds.append(fd)
-                        poll.register(fd)
-            if poll is not None and fds:
-                while fds:
-                    for tup in poll.poll(0):
-                        fd, event = tup
-                        if select.POLLOUT & event:
-                            fds.remove(fd)
         self.logger.setLevel("DEBUG" if self.debug else "WARNING")
         # This and the logger call in OnShutdown are the only unguarded ones
         self.logger.debug("loaded, logging with: %r" % self.logger)
@@ -899,19 +841,9 @@ class Signal(znc.Module):
         try:
             self.logger.debug("%r shutting down" % self.GetModName())
         except AttributeError:
-            return znc.CONTINUE
-        import logging
-        logging.shutdown()
-        for handler in self.logger.handlers:
-            self.logger.removeHandler(handler)
-        import atexit
-        try:
-            atexit._run_exitfuncs()
-        except Exception:
-            pass
-        if hasattr(get_logger, "LOGFILE"):
-            del get_logger.LOGFILE
-        return znc.CONTINUE
+            return
+        from . import get_logger
+        get_logger.clear()
 
     def _OnModCommand(self, commandline):
         """Call arg parser and delegate to appropriate method
