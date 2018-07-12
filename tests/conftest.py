@@ -24,7 +24,7 @@ __init__.py
     the ``CMessage`` helper, either via ``docker-exec`` or the telnet console
     using pexpect::
 
-      >>> from Signal import cmess_helpers      # doctest: +SKIP
+      >>> from Signal.commonweal import cmess_helpers      # doctest: +SKIP
       >>> from doctest import \
       ...     run_docstring_examples as run     # doctest: +SKIP
       >>> run(cmess_helpers, globals())         # doctest: +SKIP

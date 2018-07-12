@@ -61,6 +61,7 @@ class Signal(znc.Module):
         import sys
         self.last_traceback = sys.exc_info()[-1]
         if where is None and self.debug:
+            # TODO try logging module's builtin traceback printer
             self.logger.debug(znc.traceback.format_exc())
         elif hasattr(where, "write"):
             znc.traceback.print_exc(file=where)
@@ -489,7 +490,7 @@ class Signal(znc.Module):
                 return False
             #
             if "msg" in args_dict:
-                from . import cmess_helpers
+                from .commonweal import cmess_helpers
                 cmt = getattr(cmess_helpers, "types", None)
                 if self.debug:
                     assert self.znc_version >= (1, 7, 0)
@@ -522,7 +523,7 @@ class Signal(znc.Module):
         info from others, and save them in a normalized fashion for
         later use.
         """
-        from . import cmess_helpers as cm_util
+        from .commonweal import cmess_helpers as cm_util
         from collections.abc import Sized  # has __len__
         out_dict = dict(args_dict)
         #
@@ -740,7 +741,7 @@ class Signal(znc.Module):
             message.s = "You must be an admin to use this module"
             return False
         #
-        from .sharealike import update_module_attributes
+        from .commonweal import update_module_attributes
         update_module_attributes(self, str(argstr), "signalmod_")
         #
         if not self.datadir:

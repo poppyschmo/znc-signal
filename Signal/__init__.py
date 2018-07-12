@@ -62,52 +62,6 @@ _zip_inject("jeepney")
 if sys.version_info < (3, 6):
     raise RuntimeError("This module requires Python 3.6+")
 
-
-cmess_helpers = None
-if hasattr(znc, "CMessage"):  # helpers for CMessage in 1.7.0-rc1
-
-    def _get_params(instance):
-        """Kludge for CMessage.GetParams()"""
-        params = instance.GetParams()
-        vout = []
-        for i, p in enumerate(params):
-            p.disown()  # <- relevant line
-            vout.append(instance.GetParam(i))
-        return tuple(vout)
-
-    from collections import namedtuple
-    cmess_helpers_NT = namedtuple("CMessageHelpers", "types get_params")
-    cmess_helpers_NT.__doc__ += r"""
-    >>> mymsg = znc.CMessage(":irc.znc.in PONG irc.znc.in test_server")
-    >>> mymsg.GetParams()  # doctest: +ELLIPSIS +SKIP
-    (<Swig Object of type 'unknown' at 0x...>, <Swig Object ...>)
-    >>> cmess_helpers.get_params(mymsg)
-    ('irc.znc.in', 'test_server')
-    >>> cmess_helpers.types(mymsg.GetType())
-    <CMessage::Type.Pong: 16>
-    >>> cmess_helpers.types(16) == cmess_helpers.types.Pong == \
-    ...     cmess_helpers.types["Pong"] == _
-    True
-
-    Note: running the above without the ``+SKIP`` directive produces
-    this friendly log message::
-
-        swig/python detected a memory leak of type 'unknown', ...
-            no destructor found.
-
-    Actually, the lack of log formatting suggests it's just dumped
-    straight to the out stream.
-    """
-    from enum import Enum
-    cmess_helpers = cmess_helpers_NT(
-        Enum("CMessage::Type",
-             ((k.split("_", 1)[-1], v) for
-              k, v in vars(znc.CMessage).items() if
-              k.startswith("Type_"))),
-        _get_params
-    )
-
-
 from .ootil import GetLogger  # noqa E402
 get_logger = GetLogger()
 from .textsecure import Signal  # noqa E402
