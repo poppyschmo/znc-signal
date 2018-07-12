@@ -227,32 +227,28 @@ ordering/priority). Also collect and consolidate general questions involving
 fundamental ZNC and/or SWIG behavior. Possibly do the same for IRC/RFC related
 stuff. Add simple, reproducible examples.
 
-1. Remove all hook-inspection and interception from the main module. (Perhaps
-   create a dedicated "learning" module for this purpose.) Explicitly define
-   all `On*`-style hook methods for easier maintenance and sharing.
+1. File upstream bug reports where warranted.
 
-2. File upstream bug reports where warranted.
-
-3. Investigate the signal-cli "startup delay" issue. Description: the process
+2. Investigate the signal-cli "startup delay" issue. Description: the process
    lies dormant for up to 30 minutes before connecting to the message bus;
    it's also delayed in recognizing the first message, incoming or outgoing.
    Search upstream for relevant discussions/activity; perhaps create a DSL or
    shell script demonstrating the issue in a reproducible way. Use a debugger
    or system-call inspector to hunt for clues.
 
-4. Integrate signal-cli 0.6.0 features
+3. Integrate signal-cli 0.6.0 features
    1. Employ receipt subscription and acknowledgment
    2. Queue undelivered messages
    3. Alert attached clients or save to context buffers when backlogs arise
 
-5. Prepare a TCP/Unix-domain-socket shim for the signal-cli container in case
+4. Prepare a TCP/Unix-domain-socket shim for the signal-cli container in case
    some future release of D-Bus drops TCP support entirely.
 
-6. Find some means of testing against real ZNC and signal-cli instances to
+5. Find some means of testing against real ZNC and signal-cli instances to
    stay abreast of recent developments. Perhaps a move to GitLab would make
    this easier. Although ZNC, Signal, and signal-cli are all on GitHub.
 
-7. Either implement or remove the various "placeholder" config options
+6. Either implement or remove the various "placeholder" config options
    stolen early on from [ZNC Push][]. These are all currently ignored:
    1. `/templates/*/length`
    2. `/conditions/*/replied_only`
@@ -260,9 +256,9 @@ stuff. Add simple, reproducible examples.
    4. `/conditions/*/timeout_push`
    5. `/conditions/*/timeout_idle`
 
-8. Prepare for `getGroupIds()` in subsequent signal-cli release.
+7. Prepare for `getGroupIds()` in subsequent signal-cli release.
 
-9. Drop support for sub-1.7 ZNC versions at some target date or with the next
+8. Drop support for sub-1.7 ZNC versions at some target date or with the next
    minor ZNC release.
 
 
