@@ -44,7 +44,7 @@ def test_OnModCommand(signal_stub, signal_stub_debug):
     # Exceptions during call to associated method are caught
     sig._OnModCommand("debug_fail ValueError 'some msg'")
     assert sig._read() == ""  # Nothing Put when debug is active
-    with open(sig.env["LOGFILE"]) as flo:
+    with open(sig.logfile) as flo:
         output = flo.read().strip()
     assert output.splitlines()[-1] == 'ValueError: some msg'
     assert (sig.last_traceback.tb_frame.f_locals["argv"] ==

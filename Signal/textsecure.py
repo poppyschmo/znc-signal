@@ -10,6 +10,7 @@ class Signal(znc.Module):
     args_help_text = "DATADIR=<path> DEBUG=<bool> LOGFILE=<path>"
     has_args = True
     znc_version = None  # tuple, e.g. 1.7.0-rc1 -> (1, 7, 0)
+    logfile = None      # str, $LOGFILE, get_logger.LOGFILE is file-like obj
     datadir = None      # str, $DATADIR or path from CModule::GetSavePath()
     env = None          # dict, copy of environ w. SIGNALMOD_ prefixes dropped
     tz = None           # datetime.timezone
@@ -739,44 +740,30 @@ class Signal(znc.Module):
             message.s = "You must be an admin to use this module"
             return False
         #
-        self.env = dict(os.environ)
-        # Claim environment-variable namespace "SIGNALMOD_"
-        for env_key, env_val in os.environ.items():
-            if env_key.lower().startswith("signalmod_"):
-                trunc_key = env_key.upper().replace("SIGNALMOD_", "")
-                self.env[trunc_key] = env_val  # clobber collisions
-        if str(argstr):
-            import shlex
-            self.env.update((a.split("=") for a in shlex.split(str(argstr))))
-        # Leading underscore means undocumented/temporary dev/debug args
-        from configparser import RawConfigParser
-        bools = RawConfigParser.BOOLEAN_STATES
-        self.debug = bools.get(self.env.get("DEBUG", "0").lower(), False)
-        self.log_raw = bools.get(self.env.get("_RAW", "0").lower(), False)
-        self.log_old_hooks = bools.get(self.env.get("_OLD_HOOKS",
-                                                    "0").lower(), False)
+        from .sharealike import update_module_attributes
+        update_module_attributes(self, str(argstr), "signalmod_")
         #
-        self.datadir = self.env.get("DATADIR") or self.GetSavePath()
+        if not self.datadir:
+            self.datadir = self.GetSavePath()
         #
         msg = []
         msg.append(f"Args: {self.args_help_text}")
         #
-        # Although get_logger is created in __init__.py, importing it in file
-        # scope (i.e., at import time) creates a duplicate belonging to this
-        # (python) module. We want the root-level package instance to be shared
-        # among all submodules.
+        # Although get_logger is created in __init__.py, importing it here in
+        # file scope (i.e., at import time) creates another object belonging to
+        # this (python) module. But we want the root-level instance to be
+        # shared among all submodules.
+        # TODO verify this is normal Python behavior and not particular to ZNC
         from . import get_logger
         if self.debug:
             assert os.path.exists(self.datadir)
             msg[-1] += "; or pass as env vars prefixed with SIGNALMOD_"
-            logfile = self.env.get("LOGFILE")
-            if not logfile:
-                logfile = os.path.join(self.datadir, "signal.log")
+            if not self.logfile:
+                self.logfile = os.path.join(self.datadir, "signal.log")
                 msg.append("\x02Warning: DEBUG mode is useless without LOGFILE"
                            "; setting to %r, but will not rotate/truncate; "
-                           "Consider a pty instead\x02" % logfile)
-                self.env["LOGFILE"] = logfile
-            get_logger.LOGFILE = open(logfile, "w")
+                           "Consider a pty instead\x02" % self.logfile)
+            get_logger.LOGFILE = open(self.logfile, "w")
         self.logger = get_logger(self.__class__.__name__)
         self.logger.setLevel("DEBUG" if self.debug else "WARNING")
         # This and the logger call in OnShutdown are the only unguarded ones

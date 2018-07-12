@@ -318,7 +318,6 @@ def signal_stub_debug(tmpdir, monkeypatch):
     del os.environ["SIGNALMOD_DEBUG"]
     yield stub
     stub._OnShutdown()
-    del stub.env["LOGFILE"]
     if stub._buffer is not None:
         stub._buffer.close()
 

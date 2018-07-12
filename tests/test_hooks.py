@@ -110,9 +110,13 @@ def env_stub(signal_stub):
     os.environ["SIGNALMOD_FOO"] = "foo_val"
     signal_stub.__class__._argstring = \
         f"DATADIR={os.devnull} FOO=someval UNKNOWN=ignored"
+    signal_stub.__class__.foo = None
+    signal_stub.__class__.fake = None
     env_stub = signal_stub.__class__()
     signal_stub.__class__._argstring = ""
     yield env_stub
+    del signal_stub.__class__.foo
+    del signal_stub.__class__.fake
     del os.environ["SIGNALMOD_FAKE"]
     del os.environ["SIGNALMOD_FOO"]
     if env_stub._buffer is not None:
@@ -208,14 +212,13 @@ def test_OnLoad(env_stub):
     import os
     # Process environment is not modified
     assert all_in(os.environ, "SIGNALMOD_FAKE", "SIGNALMOD_FOO")
-    assert not any_in(os.environ, "FAKE", "FOO")
-    assert env_stub.env["SIGNALMOD_FAKE"] == \
-        env_stub.env["FAKE"] == "fake_val"
+    assert env_stub.fake == os.environ["SIGNALMOD_FAKE"] == "fake_val"
     assert os.environ["SIGNALMOD_FOO"] == "foo_val"
-    # Namespaced env vars are not deleted from env attr
-    assert env_stub.env["SIGNALMOD_FOO"] == "foo_val"
-    # LoadMod args override environment variables
-    assert env_stub.env["FOO"] == "someval"
+    # OnLoad args override environment variables
+    assert env_stub.foo == "someval"
+    # Unknown attributes are ignored
+    assert not hasattr(env_stub, "unknown")
+    assert hasattr(env_stub, "datadir") and env_stub.datadir == os.devnull
     # TODO use pseudo terminal to test debug logger (likely requires Linux)
 
 
