@@ -68,8 +68,9 @@ class String:
         self.s = s
 
 
-def CZNC_GetVersion():
-    return "1.6.6"
+class CZNC:
+    def GetVersion():
+        return "1.6.6"
 
 
 class CModInfo(Enum):

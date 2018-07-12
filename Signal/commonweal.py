@@ -10,6 +10,20 @@ Needed objects can be reached via instance args ("self").
 """
 from . import znc
 
+znc_version_str = znc.CZNC.GetVersion()
+znc_version = tuple(map(int, znc_version_str.partition("-")[0].split(".")))
+
+
+def get_deprecated_hooks():
+    if znc_version < (1, 7, 0):
+        return None
+    on_hooks = {a for a in dir(znc.Module) if a.startswith("On")}
+    depcands = {o.replace("TextMessage", "Msg")
+                .replace("PlayMessage", "PlayLine")
+                .replace("Message", "") for
+                o in on_hooks if o.endswith("Message")}
+    return on_hooks & depcands
+
 
 def get_cmess_helpers():
     r"""Helpers for dealing with CMessage objects
@@ -59,9 +73,6 @@ def _get_params(cm):
         p.disown()  # <- makes mem leak msg go away; no idea why
         vout.append(cm.GetParam(i))
     return tuple(vout)
-
-
-cmess_helpers = get_cmess_helpers()
 
 
 def update_module_attributes(inst, argstr, namespace=None):
@@ -115,3 +126,7 @@ def update_module_attributes(inst, argstr, namespace=None):
         if not val or not hasattr(inst, key):
             continue
         adopt(key, val)
+
+
+deprecated_hooks = get_deprecated_hooks()
+cmess_helpers = get_cmess_helpers()

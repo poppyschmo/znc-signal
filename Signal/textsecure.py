@@ -731,17 +731,14 @@ class Signal(znc.Module):
         return znc.CONTINUE
 
     def _OnLoad(self, argstr, message):
-        # Treat module args like environment variables
-        import os
-        # TODO use znc.VersionMajor or CZNC.GetVersion() instead
-        version_string = znc.CZNC_GetVersion().partition("-")[0]
-        self.znc_version = tuple(map(int, version_string.split(".")))
-        #
         if not self.GetUser().IsAdmin():
             message.s = "You must be an admin to use this module"
             return False
         #
-        from .commonweal import update_module_attributes
+        from .commonweal import znc_version, update_module_attributes
+        self.znc_version = znc_version
+        #
+        # Update instance attrs with argstr and envvars
         update_module_attributes(self, str(argstr), "signalmod_")
         #
         if not self.datadir:
@@ -757,6 +754,7 @@ class Signal(znc.Module):
         # TODO verify this is normal Python behavior and not particular to ZNC
         from . import get_logger
         if self.debug:
+            import os
             assert os.path.exists(self.datadir)
             msg[-1] += "; or pass as env vars prefixed with SIGNALMOD_"
             if not self.logfile:
@@ -783,13 +781,8 @@ class Signal(znc.Module):
         msg.append("Available commands: {}".format(", ".join(self.approx)))
         msg.append("Type '<command> -h' or 'help --usage' for more info")
         #
-        if self.znc_version >= (1, 7, 0):
-            on_hooks = {a for a in dir(znc.Module) if a.startswith("On")}
-            depcands = {o.replace("TextMessage", "Msg")
-                        .replace("PlayMessage", "PlayLine")
-                        .replace("Message", "") for
-                        o in on_hooks if o.endswith("Message")}
-            self.deprecated_hooks = on_hooks & depcands
+        from .commonweal import deprecated_hooks
+        self.deprecated_hooks = deprecated_hooks
         #
         # TODO warn if locale is not en_US/UTF-8 or platform not Linux
         from .ootil import get_tz
