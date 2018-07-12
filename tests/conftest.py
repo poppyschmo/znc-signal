@@ -250,7 +250,7 @@ class SignalStub(Signal):
                                                  where="PutTest")
         from znc import String, ModuleNV
         self.nv = ModuleNV()
-        self._OnLoad(self._argstring, String(""))
+        self.OnLoad(self._argstring, String(""))
 
     def put_pretty(self, lines, where="PutTest"):
         # Can't partialize because calls from ``print_traceback`` would
@@ -317,7 +317,7 @@ def signal_stub_debug(tmpdir, monkeypatch):
     SignalStub._using_debug = False
     del os.environ["SIGNALMOD_DEBUG"]
     yield stub
-    stub._OnShutdown()
+    stub.OnShutdown()
     if stub._buffer is not None:
         stub._buffer.close()
 

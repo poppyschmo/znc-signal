@@ -237,18 +237,21 @@ def test_hooks_mro(mro_stub):
         """.split())
     mrod = {f"{c.__module__}.{c.__name__}": c for
             c in mro_stub.__class__.__mro__}
-    assert mro_stub.OnLoad.__func__.__name__ == "_OnLoad"
-    assert mro_stub.OnModCommand.__func__.__name__ == "_OnModCommand"
     # Overridden
-    assert mro_stub.OnClientDisconnect.__qualname__ == \
-        'Signal.OnClientDisconnect'
-    assert (mro_stub.OnClientDisconnect.__wrapped__.__func__ in
-            mrod["Signal.textsecure.Signal"].__dict__.values())
+    assert mro_stub.OnChanTextMessage.__qualname__ == \
+        'Signal.OnChanTextMessage'
+    assert (mrod["Signal.textsecure.Signal"].__dict__["OnChanTextMessage"] is
+            not mro_stub.OnChanTextMessage.__wrapped__)
+    # Wrapper itself (unbound) appears in instance dict
+    assert (mrod["Signal.textsecure.Signal"].__dict__["OnChanTextMessage"] is
+            mro_stub.OnChanTextMessage.__func__)
     # Not overridden
     assert mro_stub.OnAddUser.__qualname__ == "Module.OnAddUser"
-    assert (mro_stub.OnAddUser.__wrapped__.__func__ not in
+    # FIXME verify no longer applies and remove (has nothing to do with
+    # wrapper, so now just describes basic Python behavior)
+    assert (mro_stub.OnAddUser.__func__ not in
             mrod["Signal.textsecure.Signal"].__dict__.values())
-    assert (mro_stub.OnAddUser.__wrapped__.__func__ in
+    assert (mro_stub.OnAddUser.__func__ in
             mrod["znc.Module"].__dict__.values())
 
 
@@ -375,7 +378,7 @@ def test_reckon(signal_stub_debug):
     sig = signal_stub_debug
     sig.manage_config("load")  # same as '[*Signal] select'
     # Quiet "no host" warning
-    sig._OnModCommand('update /settings/host localhost')
+    sig.OnModCommand('update /settings/host localhost')
     # Simulate a single, simple hook case
     rel = {'away': False,
            'channel': '#test_chan',
@@ -465,12 +468,12 @@ def test_reckon(signal_stub_debug):
     # NOTE the rest aren't tested in order, just popped as encountered
     current_defaults = list(current_defaults)
     #
-    sig._OnModCommand('update /expressions/custom @@ {"has": "dummy"}')
-    sig._OnModCommand('update /templates/standard @@ '
-                      '{"recipients": ["+12127365000"]}')
+    sig.OnModCommand('update /expressions/custom @@ {"has": "dummy"}')
+    sig.OnModCommand('update /templates/standard @@ '
+                     '{"recipients": ["+12127365000"]}')
     # Create non-default condition
     current_defaults.remove("template")
-    sig._OnModCommand('update /conditions/custom @@ {"template": "custom"}')
+    sig.OnModCommand('update /conditions/custom @@ {"template": "custom"}')
     # The "default" condition always runs last
     assert list(sig.manage_config("view")["conditions"]) == ["custom",
                                                              "default"]
@@ -486,7 +489,7 @@ def test_reckon(signal_stub_debug):
     #
     # Channel
     current_defaults.remove("channel")
-    sig._OnModCommand('update /conditions/custom/channel custom')
+    sig.OnModCommand('update /conditions/custom/channel custom')
     assert sig.reckon(data) is True
     assert data_reck == ["<custom", "!channel>", "<default", "&>"]
     sig.cmd_update("/expressions/custom/has", "test_chan")
@@ -497,10 +500,10 @@ def test_reckon(signal_stub_debug):
     #
     # Source
     current_defaults.remove("source")
-    sig._OnModCommand('update /conditions/custom/source custom')
+    sig.OnModCommand('update /conditions/custom/source custom')
     assert sig.reckon(data) is True
     assert data_reck == ["<custom", "!source>", "<default", "&>"]
-    sig._OnModCommand('update /expressions/custom @@ {"wild": "*testbot*"}')
+    sig.OnModCommand('update /expressions/custom @@ {"wild": "*testbot*"}')
     assert sig.reckon(data) is True
     assert data_reck == ["<custom", "&>"]
     current_defaults.remove("x_source")
@@ -508,7 +511,7 @@ def test_reckon(signal_stub_debug):
     sig.cmd_update("/conditions/custom/x_source", "nick")
     assert sig.reckon(data) is True
     assert data_reck == ["<custom", "!source>", "<default", "&>"]
-    sig._OnModCommand('update /expressions/custom @@ {"eq": "tbo"}')
+    sig.OnModCommand('update /expressions/custom @@ {"eq": "tbo"}')
     assert sig.reckon(data) is True
     assert data_reck == ["<custom", "&>"]
     sig.cmd_update("/conditions/custom/x_source", remove=True)
@@ -519,11 +522,11 @@ def test_reckon(signal_stub_debug):
     sig.cmd_update("/conditions/custom/body", "custom")
     assert sig.reckon(data) is True
     assert data_reck == ["<custom", "!body>", "<default", "&>"]
-    sig._OnModCommand('update /expressions/custom @@ {"has": "dummy"}')
+    sig.OnModCommand('update /expressions/custom @@ {"has": "dummy"}')
     sig.cmd_update("/conditions/custom/body", "default")
     #
     # Change default condition to always fail
-    sig._OnModCommand('update /expressions/default @@ {"!has": ""}')
+    sig.OnModCommand('update /expressions/default @@ {"!has": ""}')
     assert conds["custom"]["body"] == "default"
     assert sig.reckon(data) is False
     assert data_reck == ["<custom", '!network>', "<default", '!network>']
@@ -531,25 +534,25 @@ def test_reckon(signal_stub_debug):
     # Change per-condition, collective expressions bias
     current_defaults.remove("x_policy")  # only governs expressions portion
     assert conds["custom"]["x_policy"] == "filter"
-    sig._OnModCommand('update /conditions/default/x_policy first')
+    sig.OnModCommand('update /conditions/default/x_policy first')
     assert sig.reckon(data) is False
     assert data_reck == ["<custom", "|>", "<default", "|>"]  # Falls through
     #
     assert not current_defaults
     #
     # "FIRST" (short circuit) hit
-    sig._OnModCommand('update /conditions/custom/body custom')
+    sig.OnModCommand('update /conditions/custom/body custom')
     assert sig.reckon(data) is True
     assert data_reck == ["<custom", "body!>"]
     #
-    sig._OnModCommand('update /conditions/onetime @@ {}')
+    sig.OnModCommand('update /conditions/onetime @@ {}')
     from textwrap import dedent
     sig.cmd_select("../")
     # Clear module buffer (lots of '/foo =>' output so far)
     assert "Error" not in sig._read()
     #
     # Add another condition that runs ahead of 'custom'
-    sig._OnModCommand('select')
+    sig.OnModCommand('select')
     assert sig._read().strip() == dedent("""
         /conditions => {'custom': {...}, 'onetime': {}, 'default': {...}}
     """).strip()

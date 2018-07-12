@@ -32,17 +32,17 @@ def test_OnModCommand(signal_stub, signal_stub_debug):
     assert all(s.startswith("cmd_debug_") for
                s in sig.approx(True).keys() ^ sig.mod_commands.keys())
     # Attempt to run debug command fails
-    sig._OnModCommand("debug_args debug_fail ValueError 'some msg'")
+    sig.OnModCommand("debug_args debug_fail ValueError 'some msg'")
     assert sig._read().startswith("Invalid command; for debug-related ")
     #
     sig = signal_stub_debug
     # Invalid command (different msg)
-    sig._OnModCommand("fake_command 'fake arg'")
+    sig.OnModCommand("fake_command 'fake arg'")
     assert sig._read() == "Invalid command\n"
     # All debug commands are recognized
     assert not sig.approx(True).keys() ^ sig.mod_commands.keys()
     # Exceptions during call to associated method are caught
-    sig._OnModCommand("debug_fail ValueError 'some msg'")
+    sig.OnModCommand("debug_fail ValueError 'some msg'")
     assert sig._read() == ""  # Nothing Put when debug is active
     with open(sig.logfile) as flo:
         output = flo.read().strip()
@@ -62,7 +62,7 @@ def test_cmd_debug_args(signal_stub_debug):
     prefix = "debug_args debug_send %s"
     # Python
     line = "Signal sendMessage @@ 'hello', [], '+18885551212'"
-    sig._OnModCommand(prefix % line)
+    sig.OnModCommand(prefix % line)
     o_norm = json.loads(sig._read())
     assert o_norm == {
         'passed': ['Signal', 'sendMessage', "@@ 'hello', [], '+18885551212'"],
@@ -72,7 +72,7 @@ def test_cmd_debug_args(signal_stub_debug):
     }
     # Invalid JSON  (single '')
     line = "--json Signal sendMessage @@ 'hello', [], '+18885551212'"
-    sig._OnModCommand(prefix % line)
+    sig.OnModCommand(prefix % line)
     err_output = sig._read()  # <- error message printed first
     o_invalid_json = json.loads(err_output.split("\n", 1)[-1])
     assert o_invalid_json["parsed"]["as_json"] is True
@@ -80,7 +80,7 @@ def test_cmd_debug_args(signal_stub_debug):
     #
     # Valid JSON
     line = '--json Signal sendMessage @@ "hello", [], "+18885551212"'
-    sig._OnModCommand(prefix % line)
+    sig.OnModCommand(prefix % line)
     o_valid_json = json.loads(sig._read())
     assert o_valid_json["parsed"]["as_json"] is True
     assert o_valid_json["evaled"] == o_norm["evaled"]
@@ -88,7 +88,7 @@ def test_cmd_debug_args(signal_stub_debug):
     # The real update command does not enclose raw string in []
     prefix = "debug_args update %s"
     line = '/expressions/custom @@ {"! i has": "foo"}'
-    sig._OnModCommand(prefix % line)
+    sig.OnModCommand(prefix % line)
     o_valid_exp = json.loads(sig._read())
     assert o_valid_exp == {
         'passed': ['/expressions/custom', '@@ {"! i has": "foo"}'],
@@ -107,7 +107,7 @@ def test_cmd_debug_args(signal_stub_debug):
     # [<path>] [<value>]) is still interpreted as an @@ strings if the first is
     # absent (meaning the second is actually absent)
     line = '@@ {"! i has": "foo"}'
-    sig._OnModCommand(prefix % line)
+    sig.OnModCommand(prefix % line)
     assert json.loads(sig._read()) == {
         'passed': ['@@ {"! i has": "foo"}'],
         'parsed': {'arrange': False,
@@ -214,7 +214,7 @@ def test_cmd_update(signal_stub):
     assert sig.config is not None and not sig.debug
     sig.config = None
     # Ignore this (irrelevant, just need to initialize parser)
-    sig._OnModCommand("fake_command")
+    sig.OnModCommand("fake_command")
     assert sig._read().startswith("Invalid")
     # Attempts to modify root shows help
     assert cmd_update().startswith("usage: update [-h]")

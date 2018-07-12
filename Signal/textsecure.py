@@ -4,6 +4,57 @@
 from . import znc
 
 
+class Worm:
+    """Perform common actions for active hooks in Signal class"""
+    def __init__(self, *sig):
+        self.sig = sig
+
+    def __call__(self, hook):
+        sig = self.sig
+        #
+        def won(inst, *args, **kwargs):  # noqa: E306
+            rv = znc.CONTINUE
+            args_dict = dict(zip(sig, args))
+            #
+            if inst.znc_version >= (1, 7) and "msg" not in sig:
+                return rv
+            name = hook.__name__
+            #
+            inst._hook_data[name] = normalized = None
+            # In 1.7+, the CMessage object already includes network info
+            wants_net = inst.znc_version < (1, 7)
+            try:
+                normalized = inst.normalize_onner(name, args_dict,
+                                                  ensure_net=wants_net)
+                normalized = inst.post_normalize(name, normalized)
+            except Exception:
+                inst.print_traceback()
+                return znc.CONTINUE
+            if inst.debug:
+                from .ootil import OrderedPrettyPrinter as OrdPP
+                pretty = OrdPP().pformat(normalized)
+                inst.logger.debug(f"{name}{sig}\n{pretty}")
+            inst._hook_data[name] = normalized
+            #
+            try:
+                inst.route_verdict(name, normalized)  # void
+                rv = hook(inst, *args, **kwargs)
+            except Exception:  # most likely debug assertions
+                inst.print_traceback()
+            finally:
+                if not inst.debug:
+                    del inst._hook_data[name]
+                return rv
+        #
+        # Currently, none of these assignment/updating effects are used
+        # anywhere. If that remains the case, remove this call.
+        from functools import update_wrapper
+        return update_wrapper(won, hook)
+
+
+worm = Worm
+
+
 class Signal(znc.Module):
     module_types = [znc.CModInfo.UserModule]
     description = "Interact with a local Signal endpoint"
@@ -15,7 +66,6 @@ class Signal(znc.Module):
     tz = None           # datetime.timezone
     config = None       # config_NT, members are BaseConfigDict subclasses
     debug = False
-    log_raw = log_old_hooks = False     # from args/envvars: _RAW, _OLD_HOOKS
     logger = None                   # logging.Logger, for this CModule object
     last_traceback = None           # traceback, used by print_traceback
     last_config_selector = None     # str, used by cmd_update, cmd_select
@@ -23,39 +73,7 @@ class Signal(znc.Module):
     approx = None               # cmdopts.AllParsed ~> argparse.ArgumentParser
     mod_commands = None         # dict, {cmd_<name> : method, ...}
     #
-    active_hooks = """
-        OnChanMsg       OnChanTextMessage
-        OnChanAction    OnChanActionMessage
-        OnPrivMsg       OnPrivTextMessage
-        OnPrivAction    OnPrivActionMessage
-    """
     from .commonweal import normalize_onner, znc_version
-
-    def __new__(cls, *args, **kwargs):
-        # TODO add comment/reminder of why this stuff isn't in __init__.
-        # (Something to do with instance dict.) Also add test to justify, if
-        # possible.
-        new_self = super().__new__(cls, *args, **kwargs)
-        new_self.__dict__.update(
-            {m.lstrip("_"): getattr(new_self, m) for m in dir(new_self) if
-             m.startswith("_On")}
-        )
-        new_self.active_hooks = tuple(new_self.active_hooks.split())
-        return new_self
-
-    def __getattribute__(self, name):
-        """Intercept calls to On* methods for learning purposes
-
-        Rationale: overriding all the base methods just to see how they
-        behave is a hassle.
-        """
-        candidate = super().__getattribute__(name)
-        if name.startswith("On"):
-            try:
-                return self.__dict__[name]
-            except KeyError:
-                return self._wrap_onner(candidate)
-        return candidate
 
     def print_traceback(self, where=None):
         import sys
@@ -464,44 +482,6 @@ class Signal(znc.Module):
         narrowed["context"] = narrowed.get("channel") or narrowed["nick"]
         return narrowed
 
-    def screen_onner(self, name, args_dict):
-        """ Dedupe and filter out unwanted hooks
-
-        Always ignore PING/PONG-related traffic (don't even issue
-        deprecation warnings)
-        """
-        #
-        if any(s in name for s in ("Raw", "SendTo", "BufferPlay")):
-            if self.log_raw is False:
-                return False
-            #
-            if "msg" in args_dict:
-                from .commonweal import cmess_helpers
-                cmt = getattr(cmess_helpers, "types", None)
-                if self.debug:
-                    assert self.znc_version >= (1, 7, 0)
-                cmtype = cmt(args_dict["msg"].GetType())
-                if cmtype in (cmt.Ping, cmt.Pong):
-                    return False
-            elif "sLine" in args_dict:
-                if self.debug and self.znc_version >= (1, 7, 0):
-                    assert name in self.deprecated_hooks
-                # XXX false positives: should probably leverage ":" to narrow
-                line = str(args_dict["sLine"])
-                if "BufferPlay" not in name:
-                    if any(s in line for s in ("PING", "PONG")):
-                        return False
-                elif self.debug:
-                    assert not any(s in line for s in ("PING", "PONG"))
-            else:
-                self.logger.info(f"Unexpected hook {name!r}: {args_dict!r}")
-        #
-        if (self.log_old_hooks is False
-                and self.deprecated_hooks  # 1.7+
-                and name in self.deprecated_hooks):
-            raise PendingDeprecationWarning
-        return True
-
     def post_normalize(self, name, data):
         # Needed for config conditions involving client activity/actions. See
         # also: note re CMessage.GetTime() above.
@@ -531,60 +511,86 @@ class Signal(znc.Module):
         #
         return data
 
-    def _wrap_onner(self, onner):
-        """A surrogate for CModule 'On' hooks"""
-        #
-        def handle_onner(*args, **kwargs):
-            from inspect import signature
-            sig = signature(onner)
-            bound = sig.bind(*args, **kwargs)
-            name = onner.__name__
-            relevant = None
-            try:
-                relevant = self.screen_onner(name, bound.arguments)
-            except PendingDeprecationWarning:
-                if self.debug and self.log_raw is True:
-                    self.logger.debug("Skipping deprecated hook {!r}"
-                                      .format(name))
-            except Exception:
-                self.print_traceback()
-            if not relevant:
-                return znc.CONTINUE
-            #
-            self._hook_data[name] = normalized = None
-            # In 1.7+, the CMessage arg for all active hooks includes 'network'
-            wants_net = (name not in self.active_hooks
-                         or self.znc_version < (1, 7))
-            try:
-                normalized = self.normalize_onner(name, bound.arguments,
-                                                  ensure_net=wants_net)
-                normalized = self.post_normalize(name, normalized)
-            except Exception:
-                self.print_traceback()
-                return znc.CONTINUE
-            if self.debug:
-                from .ootil import OrderedPrettyPrinter as OrdPP
-                pretty = OrdPP().pformat(normalized)
-                self.logger.debug(f"{name}{sig}\n{pretty}")
-            self._hook_data[name] = normalized
-            rv = znc.CONTINUE
-            try:
-                if name in self.active_hooks:
-                    self.route_verdict(name, normalized)  # void
-                else:
-                    rv = onner(*args, **kwargs)
-            except Exception:  # most likely debug assertions
-                self.print_traceback()
-            finally:
-                if not self.debug:
-                    del self._hook_data[name]
-                return rv
-        #
-        # NOTE both ``__dict__``s are empty, and the various introspection
-        # attrs aren't used (even by the log formatter). And seems the magic
-        # swig stuff only applies to passed-in objects.
-        from functools import update_wrapper
-        return update_wrapper(handle_onner, onner)  # <- useless, for now
+    @worm("msg")
+    def OnPrivTextMessage(self, msg):
+        """1.7+ version of OnPrivMsg
+
+        ``msg`` members (after normalization)::
+
+            type:      'Text'
+            nick:      {...}
+            command:   'PRIVMSG'
+            params:    (<target>, <text>)
+            network:   {...}
+            target:    "..."
+            text:      "..."
+        """
+        return znc.CONTINUE
+
+    @worm("Nick", "sMessage")
+    def OnPrivMsg(self, Nick, sMessage):
+        """Pre-1.7 version of OnPrivTextMessage
+
+        Unlike the CMessage version, this doesn't include network info.
+        """
+        return znc.CONTINUE
+
+    @worm("msg")
+    def OnPrivActionMessage(self, msg):
+        """1.7+ version of OnPrivAction
+
+        Normalized ``msg`` contents are like those of
+        ``OnChanActionMessage``, minus any channel info.
+        """
+        return znc.CONTINUE
+
+    @worm("Nick", "sMessage")
+    def OnPrivAction(self, Nick, sMessage):
+        """Pre-1.7 version of OnPrivActionMessage
+
+        Unlike the CMessage version, this doesn't include network info.
+        """
+        return znc.CONTINUE
+
+    @worm("msg")
+    def OnChanTextMessage(self, msg):
+        """1.7+ version of OnChanMsg
+
+        Normalized ``msg`` contents are like those of
+        ``OnPrivTextMessage`` except with an added ``channel`` dict.
+        """
+        return znc.CONTINUE
+
+    @worm("Nick", "Channel", "sMessage")
+    def OnChanMsg(self, Nick, Channel, sMessage):
+        """Pre-1.7 version of OnChanTextMessage
+
+        Unlike the CMessage version, this doesn't include network info.
+        """
+        return znc.CONTINUE
+
+    @worm("msg")
+    def OnChanActionMessage(self, msg):
+        """1.7+ version of OnChanAction
+
+         type:    'Action'
+         nick:    {...}
+         channel: {...}
+         command: 'PRIVMSG',
+         params:  (<target>, '\\x01ACTION <text>\\x01')
+         network: {...}
+         target:  "..."
+         text:    "..."
+        """
+        return znc.CONTINUE
+
+    @worm("Nick", "Channel", "sMessage")
+    def OnChanAction(self, Nick, Channel, sMessage):
+        """Pre-1.7 version of OnChanActionMessage
+
+        Unlike the CMessage version, this doesn't include network info.
+        """
+        return znc.CONTINUE
 
     def parse_command_args(self, command, args):
         """Parse args for ZNC commands *not* DBus calls
@@ -643,7 +649,7 @@ class Signal(znc.Module):
                               f"network_name: {network_name!r}")
         return znc.CONTINUE
 
-    def _OnLoad(self, argstr, message):
+    def OnLoad(self, argstr, message):
         if not self.GetUser().IsAdmin():
             message.s = "You must be an admin to use this module"
             return False
@@ -719,7 +725,7 @@ class Signal(znc.Module):
         message.s = ". ".join(msg)
         return True  # apparently an outlier; others return EModRet
 
-    def _OnShutdown(self):
+    def OnShutdown(self):
         try:
             if self.config:
                 import os
@@ -738,7 +744,7 @@ class Signal(znc.Module):
         from . import get_logger
         get_logger.clear()
 
-    def _OnModCommand(self, commandline):
+    def OnModCommand(self, commandline):
         """Call arg parser and delegate to appropriate method
 
         ``cmd_`` namespace convention lifted from
