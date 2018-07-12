@@ -161,13 +161,13 @@ def test_normalize_hook_args(base_dir, cpymodule_hook_args):
         # Hard-code these to literal expect values for now
         assert outliers == {'OnChanMsg', 'OnPrivMsg', 'OnUserMsg',
                             'OnPrivBufferPlayLine', 'OnChanBufferPlayLine'}
-        # Dev crutch (used verbatim in OnLoad as "depcands"):
-        crutch = {o.replace("TextMessage", "Msg")
-                  .replace("PlayMessage", "PlayLine")
-                  .replace("Message", "") for
-                  o in hook_args if
-                  o.endswith("Message")} & hook_args.keys()
-        assert crutch == outliers | deprecados
+        #
+        # Note: this no longer *directly* affects the main Signal class because
+        # it no longer imports "deprecated_hooks". However, the inspector
+        # helper still relies on it, and that's used to keep things current.
+        from Signal.commonweal import get_deprecated_hooks
+        deprecated_hooks = get_deprecated_hooks(hook_args.keys())
+        assert deprecated_hooks == outliers | deprecados
         #
         # "Noisy" hooks (those containing "Raw" or "SendTo") don't contain
         # "sLine" in 1.7+ unless deprecated
@@ -179,7 +179,7 @@ def test_normalize_hook_args(base_dir, cpymodule_hook_args):
         # meaningless without ``outliers`` and ``all_sliners`` includes
         # ``raw_sliners``
         all_sliners = {k for k, v in hook_args.items() if "sLine" in v}
-        assert not all_sliners - crutch
+        assert not all_sliners - deprecated_hooks
 
 
 def test_OnLoad(env_stub):

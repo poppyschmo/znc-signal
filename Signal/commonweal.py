@@ -14,10 +14,11 @@ znc_version_str = znc.CZNC.GetVersion()
 znc_version = tuple(map(int, znc_version_str.partition("-")[0].split(".")))
 
 
-def get_deprecated_hooks():
+def get_deprecated_hooks(on_hooks=None):
     if znc_version < (1, 7, 0):
         return None
-    on_hooks = {a for a in dir(znc.Module) if a.startswith("On")}
+    if not on_hooks:  # used by /tests/test_hooks.py
+        on_hooks = {a for a in dir(znc.Module) if a.startswith("On")}
     depcands = {o.replace("TextMessage", "Msg")
                 .replace("PlayMessage", "PlayLine")
                 .replace("Message", "") for
