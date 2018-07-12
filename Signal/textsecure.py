@@ -630,25 +630,6 @@ class Signal(znc.Module):
         if kwargs:
             self.approx._wrights.connect(**kwargs)
 
-    def OnClientDisconnect(self):
-        """Obsolete hook; formerly tracked last client to issue command
-
-        This means ``put_pretty()`` would no longer target it.
-
-        TODO remove this function and fix ``test_hooks_mro()``.
-        """
-        if self.debug:
-            # No trailing "/<network>" portion
-            client_name = self.GetClient().GetFullName()
-            # These include the trailing /<network> portion
-            all_clients = self.get_clients(True)
-            assert client_name not in all_clients
-            network_name = self.GetNetwork().GetName()
-            assert "/".join((client_name, network_name))
-            self.logger.debug(f"attached clients: {all_clients}; "
-                              f"network_name: {network_name!r}")
-        return znc.CONTINUE
-
     def OnLoad(self, argstr, message):
         if not self.GetUser().IsAdmin():
             message.s = "You must be an admin to use this module"
