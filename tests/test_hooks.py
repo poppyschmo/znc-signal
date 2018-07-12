@@ -123,32 +123,6 @@ def env_stub(signal_stub):
         env_stub._buffer.close()
 
 
-@pytest.fixture
-def mro_stub(cpymodule_node, signal_stub):
-    """Patch the znc.Module stub with modpython methods"""
-    #
-    import os
-    pruned = CullNonHooks().visit(cpymodule_node[-1])
-    wrapper = ast.Module(body=[pruned])
-    cap_dict = {}
-    exec(compile(wrapper, "<string>", "exec"), cap_dict)
-    from Signal import textsecure
-    textsecure.znc.Module
-    for attr in dir(cap_dict["Module"]):
-        if attr.startswith("On"):
-            setattr(textsecure.znc.Module, attr,
-                    getattr(cap_dict["Module"], attr))
-
-    class MroStub(signal_stub.__class__):
-        _argstring = f"DATADIR={os.devnull}"
-        __new__ = textsecure.Signal.__new__
-
-    stub = MroStub()
-    yield stub
-    if stub._buffer is not None:
-        stub._buffer.close()
-
-
 def test_normalize_hook_args(base_dir, cpymodule_hook_args):
     release, hook_args = cpymodule_hook_args
     # Ensure 1.6.6 didn't suddenly add CMessage. Sad substitute for ensuring
@@ -220,39 +194,6 @@ def test_OnLoad(env_stub):
     assert not hasattr(env_stub, "unknown")
     assert hasattr(env_stub, "datadir") and env_stub.datadir == os.devnull
     # TODO use pseudo terminal to test debug logger (likely requires Linux)
-
-
-# XXX These seem wholly irrelevant now (?) since all ``OnHooks`` mix-in methods
-# were merged back in to the main module class.
-#
-# TODO justify relevance or remove (also remove fixture stub)
-def test_hooks_mro(mro_stub):
-    # The first two are bogus (describe test stub)
-    assert repr(mro_stub.__class__.__mro__) == " ".join("""
-        (<class 'test_hooks.mro_stub.<locals>.MroStub'>,
-         <class 'conftest.SignalStub'>,
-         <class 'Signal.textsecure.Signal'>,
-         <class 'znc.Module'>,
-         <class 'object'>)
-        """.split())
-    mrod = {f"{c.__module__}.{c.__name__}": c for
-            c in mro_stub.__class__.__mro__}
-    # Overridden
-    assert mro_stub.OnChanTextMessage.__qualname__ == \
-        'Signal.OnChanTextMessage'
-    assert (mrod["Signal.textsecure.Signal"].__dict__["OnChanTextMessage"] is
-            not mro_stub.OnChanTextMessage.__wrapped__)
-    # Wrapper itself (unbound) appears in instance dict
-    assert (mrod["Signal.textsecure.Signal"].__dict__["OnChanTextMessage"] is
-            mro_stub.OnChanTextMessage.__func__)
-    # Not overridden
-    assert mro_stub.OnAddUser.__qualname__ == "Module.OnAddUser"
-    # FIXME verify no longer applies and remove (has nothing to do with
-    # wrapper, so now just describes basic Python behavior)
-    assert (mro_stub.OnAddUser.__func__ not in
-            mrod["Signal.textsecure.Signal"].__dict__.values())
-    assert (mro_stub.OnAddUser.__func__ in
-            mrod["znc.Module"].__dict__.values())
 
 
 # TODO move these data records to a separate file and use script to generate

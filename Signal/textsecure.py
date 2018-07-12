@@ -4,57 +4,6 @@
 from . import znc
 
 
-class Worm:
-    """Perform common actions for active hooks in Signal class"""
-    def __init__(self, *sig):
-        self.sig = sig
-
-    def __call__(self, hook):
-        sig = self.sig
-        #
-        def won(inst, *args, **kwargs):  # noqa: E306
-            rv = znc.CONTINUE
-            args_dict = dict(zip(sig, args))
-            #
-            if inst.znc_version >= (1, 7) and "msg" not in sig:
-                return rv
-            name = hook.__name__
-            #
-            inst._hook_data[name] = normalized = None
-            # In 1.7+, the CMessage object already includes network info
-            wants_net = inst.znc_version < (1, 7)
-            try:
-                normalized = inst.normalize_onner(name, args_dict,
-                                                  ensure_net=wants_net)
-                normalized = inst.post_normalize(name, normalized)
-            except Exception:
-                inst.print_traceback()
-                return znc.CONTINUE
-            if inst.debug:
-                from .ootil import OrderedPrettyPrinter as OrdPP
-                pretty = OrdPP().pformat(normalized)
-                inst.logger.debug(f"{name}{sig}\n{pretty}")
-            inst._hook_data[name] = normalized
-            #
-            try:
-                inst.route_verdict(name, normalized)  # void
-                rv = hook(inst, *args, **kwargs)
-            except Exception:  # most likely debug assertions
-                inst.print_traceback()
-            finally:
-                if not inst.debug:
-                    del inst._hook_data[name]
-                return rv
-        #
-        # Currently, none of these assignment/updating effects are used
-        # anywhere. If that remains the case, remove this call.
-        from functools import update_wrapper
-        return update_wrapper(won, hook)
-
-
-worm = Worm
-
-
 class Signal(znc.Module):
     module_types = [znc.CModInfo.UserModule]
     description = "Interact with a local Signal endpoint"
@@ -69,7 +18,6 @@ class Signal(znc.Module):
     logger = None                   # logging.Logger, for this CModule object
     last_traceback = None           # traceback, used by print_traceback
     last_config_selector = None     # str, used by cmd_update, cmd_select
-    deprecated_hooks = None         # set, redundant, non-CMessage hooks, 1.7+
     approx = None               # cmdopts.AllParsed ~> argparse.ArgumentParser
     mod_commands = None         # dict, {cmd_<name> : method, ...}
     #
@@ -511,7 +459,41 @@ class Signal(znc.Module):
         #
         return data
 
-    @worm("msg")
+    def get_hook_data(self, name, **kwargs):
+        """Perform common hook-related tasks
+
+        Formerly existed as a wrapper for decorated On* hooks; converted
+        to normal func for the sake of clarity.
+        """
+        #
+        if self.znc_version >= (1, 7) and "msg" not in kwargs:
+            return
+        #
+        self._hook_data[name] = normalized = None
+        # In 1.7+, the CMessage object already includes network info
+        wants_net = self.znc_version < (1, 7)
+        try:
+            normalized = self.normalize_onner(name, kwargs,
+                                              ensure_net=wants_net)
+            normalized = self.post_normalize(name, normalized)
+        except Exception:
+            self.print_traceback()
+            return znc.CONTINUE
+        if self.debug:
+            from .ootil import OrderedPrettyPrinter as OrdPP
+            pretty = OrdPP().pformat(normalized)
+            sig = ", ".join(kwargs)
+            self.logger.debug(f"{name}({sig})\n{pretty}")
+        self._hook_data[name] = normalized
+        #
+        try:
+            self.route_verdict(name, normalized)  # void
+        except Exception:  # most likely shaky debug assertions
+            self.print_traceback()
+        finally:
+            if not self.debug:
+                del self._hook_data[name]
+
     def OnPrivTextMessage(self, msg):
         """1.7+ version of OnPrivMsg
 
@@ -525,51 +507,52 @@ class Signal(znc.Module):
             target:    "..."
             text:      "..."
         """
+        self.get_hook_data("OnPrivTextMessage", msg=msg)
         return znc.CONTINUE
 
-    @worm("Nick", "sMessage")
     def OnPrivMsg(self, Nick, sMessage):
         """Pre-1.7 version of OnPrivTextMessage
 
         Unlike the CMessage version, this doesn't include network info.
         """
+        self.get_hook_data("OnPrivMsg", Nick=Nick, sMessage=sMessage)
         return znc.CONTINUE
 
-    @worm("msg")
     def OnPrivActionMessage(self, msg):
         """1.7+ version of OnPrivAction
 
         Normalized ``msg`` contents are like those of
         ``OnChanActionMessage``, minus any channel info.
         """
+        self.get_hook_data("OnPrivActionMessage", msg=msg)
         return znc.CONTINUE
 
-    @worm("Nick", "sMessage")
     def OnPrivAction(self, Nick, sMessage):
         """Pre-1.7 version of OnPrivActionMessage
 
         Unlike the CMessage version, this doesn't include network info.
         """
+        self.get_hook_data("OnPrivAction", Nick=Nick, sMessage=sMessage)
         return znc.CONTINUE
 
-    @worm("msg")
     def OnChanTextMessage(self, msg):
         """1.7+ version of OnChanMsg
 
         Normalized ``msg`` contents are like those of
-        ``OnPrivTextMessage`` except with an added ``channel`` dict.
+        ``OnPrivTextMessage``, except with an added ``channel`` item.
         """
+        self.get_hook_data("OnChanTextMessage", msg=msg)
         return znc.CONTINUE
 
-    @worm("Nick", "Channel", "sMessage")
     def OnChanMsg(self, Nick, Channel, sMessage):
         """Pre-1.7 version of OnChanTextMessage
 
         Unlike the CMessage version, this doesn't include network info.
         """
+        self.get_hook_data("OnChanMsg", Nick=Nick, Channel=Channel,
+                           sMessage=sMessage)
         return znc.CONTINUE
 
-    @worm("msg")
     def OnChanActionMessage(self, msg):
         """1.7+ version of OnChanAction
 
@@ -582,14 +565,16 @@ class Signal(znc.Module):
          target:  "..."
          text:    "..."
         """
+        self.get_hook_data("OnChanActionMessage", msg=msg)
         return znc.CONTINUE
 
-    @worm("Nick", "Channel", "sMessage")
     def OnChanAction(self, Nick, Channel, sMessage):
         """Pre-1.7 version of OnChanActionMessage
 
         Unlike the CMessage version, this doesn't include network info.
         """
+        self.get_hook_data("OnChanAction", Nick=Nick, Channel=Channel,
+                           sMessage=sMessage)
         return znc.CONTINUE
 
     def parse_command_args(self, command, args):
@@ -679,9 +664,6 @@ class Signal(znc.Module):
         self.mod_commands = {c: getattr(self, c) for c in self.approx(True)}
         msg.append("Available commands: {}".format(", ".join(self.approx)))
         msg.append("Type '<command> -h' or 'help --usage' for more info")
-        #
-        from .commonweal import deprecated_hooks
-        self.deprecated_hooks = deprecated_hooks
         #
         # TODO warn if locale is not en_US/UTF-8 or platform not Linux
         from .ootil import get_tz
