@@ -216,6 +216,7 @@ class Console(znc.Socket, InteractiveConsole):
             self.logger.debug(self.econs(self.GetConState()))
 
     def OnDisconnected(self):
+        self.put_issuer("{!r} disconnected".format(self.GetSockName()))
         self.throw_gen(EOFError, "Disconnected")
 
     def OnTimeout(self):
