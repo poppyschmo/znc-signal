@@ -143,5 +143,87 @@ def get_first(data, *keys):
             return cand
 
 
+def normalize_onner(inst, name, args_dict, ensure_net=False):
+    """Preprocess hook arguments
+
+    Ignore hooks describing client-server business. Extract relevant
+    info from others, and save them in a normalized fashion for
+    later use.
+    """
+    cm_util = cmess_helpers
+    from collections.abc import Sized  # has __len__
+    out_dict = dict(args_dict)
+    #
+    def unempty(**kwargs):  # noqa: E306
+        return {k: v for k, v in kwargs.items() if
+                v is not None
+                and (v or not isinstance(v, Sized))}
+    #
+    def extract(v):  # noqa: E306
+        """Save anything relevant to conditions tests"""
+        # TODO monitor CMessage::GetTime; as of 1.7.0-rc1, it returns a
+        # SWIG timeval ptr obj, which can't be dereferenced to a sys/time.h
+        # timeval. If it were made usable, we could forgo calling time().
+        #
+        # NOTE originally, these were kept json-serializable for latent
+        # logging with details not conveyed by reprs -- any attempt to
+        # persist swig objects result(ed) in a crash once this frame was
+        # popped, regardless of any disown/thisown stuff. After changing
+        # logging/debugging approach, there's no longer any reason not to
+        # include non-swig objects in "_hook_data".
+        # XXX ^^^^^^^^^^^^^^^ move above ^^^^^^^^^^^^^^ to a commit message
+        # NOTE CHTTPSock (and web templates) are a special case, just
+        # ignore, for now (logger will complain of 'unhandled arg')
+        if isinstance(v, str):
+            return v
+        elif isinstance(v, (znc.String, znc.CPyRetString)):
+            return str(v)
+        elif isinstance(v, znc.CClient):
+            return str(v.GetFullName())
+        elif isinstance(v, znc.CIRCNetwork):
+            return unempty(name=str(v.GetName()) or None,
+                           away=v.IsIRCAway(),
+                           client_count=len(v.GetClients()))
+        elif isinstance(v, znc.CChan):
+            return unempty(name=str(v.GetName()) or None,
+                           detached=v.IsDetached())
+        elif isinstance(v, znc.CNick):
+            # TODO see src to find out how nickmask differs from hostmask
+            return unempty(nick=v.GetNick(),
+                           ident=v.GetIdent(),
+                           host=v.GetHost(),
+                           perms=v.GetPermStr(),
+                           nickmask=v.GetNickMask(),
+                           hostmask=v.GetHostMask())
+        # Covers CPartMessage, CTextMessage
+        elif hasattr(znc, "CMessage") and isinstance(v, znc.CMessage):
+            return unempty(type=cm_util.types(v.GetType()).name,
+                           nick=extract(v.GetNick()),
+                           client=extract(v.GetClient()),
+                           channel=extract(v.GetChan()),
+                           command=v.GetCommand(),
+                           params=cm_util.get_params(v),
+                           network=extract(v.GetNetwork()),
+                           target=extract(getattr(v, "GetTarget",
+                                                  None.__class__)()),
+                           text=extract(getattr(v, "GetText",
+                                                None.__class__)()))
+        elif v is not None:
+            inst.logger.debug(f"Unhandled arg: {k!r}: {v!r}")
+    #
+    for k, v in args_dict.items():
+        try:
+            out_dict[k] = extract(v)
+        except Exception:
+            inst.print_traceback()
+    #
+    # Needed for common lookups (reckoning and expanding msg fmt vars)
+    if ensure_net and not get_first(out_dict, "network", "Network"):
+        net = inst.GetNetwork()
+        if net:
+            out_dict["network"] = extract(net)
+    return out_dict
+
+
 deprecated_hooks = get_deprecated_hooks()
 cmess_helpers = get_cmess_helpers()

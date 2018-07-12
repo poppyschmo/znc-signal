@@ -9,7 +9,6 @@ class Signal(znc.Module):
     description = "Interact with a local Signal endpoint"
     args_help_text = "DATADIR=<path> DEBUG=<bool> LOGFILE=<path>"
     has_args = True
-    znc_version = None  # tuple, e.g. 1.7.0-rc1 -> (1, 7, 0)
     logfile = None      # str, $LOGFILE, get_logger.LOGFILE is file-like obj
     datadir = None      # str, $DATADIR or path from CModule::GetSavePath()
     env = None          # dict, copy of environ w. SIGNALMOD_ prefixes dropped
@@ -30,6 +29,7 @@ class Signal(znc.Module):
         OnPrivMsg       OnPrivTextMessage
         OnPrivAction    OnPrivActionMessage
     """
+    from .commonweal import normalize_onner, znc_version
 
     def __new__(cls, *args, **kwargs):
         # TODO add comment/reminder of why this stuff isn't in __init__.
@@ -502,100 +502,21 @@ class Signal(znc.Module):
             raise PendingDeprecationWarning
         return True
 
-    def normalize_onner(self, name, args_dict):
-        """Preprocess hook arguments
-
-        Ignore hooks describing client-server business. Extract relevant
-        info from others, and save them in a normalized fashion for
-        later use.
-        """
-        from .commonweal import cmess_helpers as cm_util
-        from collections.abc import Sized  # has __len__
-        out_dict = dict(args_dict)
-        #
-        # FIXME name should be 'unempty'
-        def upnempty(**kwargs):  # noqa: E306
-            return {k: v for k, v in kwargs.items() if
-                    v is not None
-                    and (v or not isinstance(v, Sized))}
-        #
-        def extract(v):  # noqa: E306
-            """Save anything relevant to conditions tests"""
-            # TODO monitor CMessage::GetTime; as of 1.7.0-rc1, it returns a
-            # SWIG timeval ptr obj, which can't be dereferenced to a sys/time.h
-            # timeval. If it were made usable, we could forgo calling time().
-            #
-            # NOTE originally, these were kept json-serializable for latent
-            # logging with details not conveyed by reprs -- any attempt to
-            # persist swig objects result(ed) in a crash once this frame was
-            # popped, regardless of any disown/thisown stuff. After changing
-            # logging/debugging approach, there's no longer any reason not to
-            # include non-swig objects in "_hook_data".
-            # XXX ^^^^^^^^^^^^^^^ move above ^^^^^^^^^^^^^^ to a commit message
-            # NOTE CHTTPSock (and web templates) are a special case, just
-            # ignore, for now (logger will complain of 'unhandled arg')
-            if isinstance(v, str):
-                return v
-            elif isinstance(v, (znc.String, znc.CPyRetString)):
-                return str(v)
-            elif isinstance(v, znc.CClient):
-                return str(v.GetFullName())
-            elif isinstance(v, znc.CIRCNetwork):
-                return upnempty(name=str(v.GetName()) or None,
-                                away=v.IsIRCAway(),
-                                client_count=len(v.GetClients()))
-            elif isinstance(v, znc.CChan):
-                return upnempty(name=str(v.GetName()) or None,
-                                detached=v.IsDetached())
-            elif isinstance(v, znc.CNick):
-                # TODO see src to find out how nickmask differs from hostmask
-                return upnempty(nick=v.GetNick(),
-                                ident=v.GetIdent(),
-                                host=v.GetHost(),
-                                perms=v.GetPermStr(),
-                                nickmask=v.GetNickMask(),
-                                hostmask=v.GetHostMask())
-            # Covers CPartMessage, CTextMessage
-            elif hasattr(znc, "CMessage") and isinstance(v, znc.CMessage):
-                return upnempty(type=cm_util.types(v.GetType()).name,
-                                nick=extract(v.GetNick()),
-                                client=extract(v.GetClient()),
-                                channel=extract(v.GetChan()),
-                                command=v.GetCommand(),
-                                params=cm_util.get_params(v),
-                                network=extract(v.GetNetwork()),
-                                target=extract(getattr(v, "GetTarget",
-                                                       None.__class__)()),
-                                text=extract(getattr(v, "GetText",
-                                                     None.__class__)()))
-            elif v is not None:
-                self.logger.debug(f"Unhandled arg: {k!r}: {v!r}")
-        #
-        for k, v in args_dict.items():
-            try:
-                out_dict[k] = extract(v)
-            except Exception:
-                self.print_traceback()
-        #
-        from .commonweal import get_first
-        # Needed for common lookups (reckoning and expanding msg fmt vars)
-        if ((self.debug or name in self.active_hooks)
-                and not get_first(out_dict, "network", "Network")):
-            net = self.GetNetwork()
-            if net:
-                out_dict["network"] = {"name": net.GetName(),
-                                       "away": net.IsIRCAway(),
-                                       "client_count": len(net.GetClients())}
-        #
+    def post_normalize(self, name, data):
         # Needed for config conditions involving client activity/actions. See
         # also: note re CMessage.GetTime() above.
         from datetime import datetime
         justnow = datetime.now(self.tz)
-        out_dict["time"] = justnow.isoformat()
+        data["time"] = justnow.isoformat()
+        #
+        # TODO these are just placeholders, for now. They don't actually run
+        # because this func only fires from Chan/Priv hooks
+        #
         time_hooks = {"OnUserMsg", "OnUserTextMessage",  # rhs are 1.7+
                       "OnUserAction", "OnUserActionMessage"}
         if name in time_hooks:
-            target = get_first(out_dict, "target", "sTarget")
+            from .commonweal import get_first
+            target = get_first(data, "target", "sTarget")
             if target:
                 if not hasattr(self, "_user_targets"):
                     self._user_targets = {}
@@ -608,7 +529,7 @@ class Signal(znc.Module):
         if name in time_hooks | idle_hooks:
             self._idle = justnow
         #
-        return out_dict
+        return data
 
     def _wrap_onner(self, onner):
         """A surrogate for CModule 'On' hooks"""
@@ -631,8 +552,13 @@ class Signal(znc.Module):
                 return znc.CONTINUE
             #
             self._hook_data[name] = normalized = None
+            # In 1.7+, the CMessage arg for all active hooks includes 'network'
+            wants_net = (name not in self.active_hooks
+                         or self.znc_version < (1, 7))
             try:
-                normalized = self.normalize_onner(name, bound.arguments)
+                normalized = self.normalize_onner(name, bound.arguments,
+                                                  ensure_net=wants_net)
+                normalized = self.post_normalize(name, normalized)
             except Exception:
                 self.print_traceback()
                 return znc.CONTINUE
@@ -722,10 +648,9 @@ class Signal(znc.Module):
             message.s = "You must be an admin to use this module"
             return False
         #
-        from .commonweal import znc_version, update_module_attributes
-        self.znc_version = znc_version
-        #
-        # Update instance attrs with argstr and envvars
+        # Update instance attrs with argstr and envvars; this is only called
+        # here, so there's no reason to patch class with yet more funcs
+        from .commonweal import update_module_attributes
         update_module_attributes(self, str(argstr), "signalmod_")
         #
         if not self.datadir:
