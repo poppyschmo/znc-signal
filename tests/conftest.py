@@ -306,12 +306,11 @@ def signal_stub():
 @pytest.fixture
 def signal_stub_debug(tmpdir, monkeypatch):
     import os
-    import znc
     #
     def gsp(self):  # noqa: E306
         return str(tmpdir)
     #
-    monkeypatch.setattr(znc.Module, "GetSavePath", gsp)
+    monkeypatch.setattr(_znc.Module, "GetSavePath", gsp)
     SignalStub._using_debug = True
     os.environ["SIGNALMOD_DEBUG"] = "1"
     stub = SignalStub()
