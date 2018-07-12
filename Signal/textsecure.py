@@ -390,6 +390,8 @@ class Signal(znc.Module):
         if not hasattr(self, "_connection") or self._connection.IsClosed():
             msg = ("Push aborted; reason: no connection to {!r}"
                    .format(self.config.settings.get("host", "null")))
+        if hasattr(self, "_connection") and not self._connection.has_service:
+            msg = ("Push aborted; reason: Waiting for signal service")
         if msg:
             if self.debug:
                 self.logger.debug(msg)
