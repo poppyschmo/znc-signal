@@ -128,5 +128,20 @@ def update_module_attributes(inst, argstr, namespace=None):
         adopt(key, val)
 
 
+def get_first(data, *keys):
+    """Retrieve a normalized data item, looking first in 'msg'
+    """
+    if "msg" in data:
+        first, *rest = keys
+        cand = data["msg"].get(first)
+        if cand is not None:
+            return cand
+        keys = rest
+    for key in keys:
+        cand = data.get(key)
+        if cand is not None:
+            return cand
+
+
 deprecated_hooks = get_deprecated_hooks()
 cmess_helpers = get_cmess_helpers()

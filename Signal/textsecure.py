@@ -356,7 +356,8 @@ class Signal(znc.Module):
                     assert data["msg"]["type"] not in ("Text",
                                                        "Notice",
                                                        "Action")
-                params = self.get_first(data, "params")
+                from .commonweal import get_first
+                params = get_first(data, "params")
                 if data["msg"]["type"] != "Action" and len(params) > 1:
                     assert relevant["body"] == " ".join(params[1:])
             if relevant.get("channel"):  # else params[0] is target (%nick%)
@@ -423,34 +424,19 @@ class Signal(znc.Module):
         payload = (message, [], recipients)
         self.do_send("Signal", "sendMessage", cb, payload)
 
-    def get_first(self, data, *keys):
-        """Retrieve a normalized data item, looking first in 'msg'
-        """
-        if "msg" in data:
-            first, *rest = keys
-            if self.debug:
-                assert first.islower()
-                assert not any(s.islower() for s in rest)
-            cand = data["msg"].get(first)
-            if cand is not None:
-                return cand
-            keys = rest
-        for key in keys:
-            cand = data.get(key)
-            if cand is not None:
-                return cand
-
     def get_relevant(self, data):
         """Narrow/flatten normalized data to zone of interest
 
         At this point, all data/data.msg values should (mostly) be
         primitives (strings and ints).
         """
-        def narrow(lookups):
+        from .commonweal import get_first
+        #
+        def narrow(lookups):  # noqa: E306
             common = {}
             from collections import MutableMapping
             for key, cands in lookups.items():
-                wanted = self.get_first(data, *cands)
+                wanted = get_first(data, *cands)
                 if not wanted:
                     continue
                 if isinstance(wanted, MutableMapping):
@@ -591,9 +577,10 @@ class Signal(znc.Module):
             except Exception:
                 self.print_traceback()
         #
+        from .commonweal import get_first
         # Needed for common lookups (reckoning and expanding msg fmt vars)
         if ((self.debug or name in self.active_hooks)
-                and not self.get_first(out_dict, "network", "Network")):
+                and not get_first(out_dict, "network", "Network")):
             net = self.GetNetwork()
             if net:
                 out_dict["network"] = {"name": net.GetName(),
@@ -608,7 +595,7 @@ class Signal(znc.Module):
         time_hooks = {"OnUserMsg", "OnUserTextMessage",  # rhs are 1.7+
                       "OnUserAction", "OnUserActionMessage"}
         if name in time_hooks:
-            target = self.get_first(out_dict, "target", "sTarget")
+            target = get_first(out_dict, "target", "sTarget")
             if target:
                 if not hasattr(self, "_user_targets"):
                     self._user_targets = {}
