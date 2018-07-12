@@ -67,33 +67,14 @@ class FakeLoop(AbstractEventLoop):
     """Kludge for DBusConnection's incoming data dispatcher (router)
 
     Obviously, this is pure mockery and not a real shim.
-
-    Notes
-    ~~~~~
-    CCron.StartMaxCycles is overloaded. The form called by CTimer takes
-    a double, dTimeSequence, which CCron massages into a timeval struct,
-    m_tTimeSequence. ZNC passes in an unsigned int, however, so the
-    microsecs portion (tv_usec) is narrowed away on arrival.
     """
     def __init__(self, module):
         self.module = module
 
     def call_later(self, delay, callback, *args):
-        """Enable ``FakeFuture._schedule_callbacks``
-
-        This is just a formality and could just as well fire the
-        callback directly (straight away).
-        """
-
-        def RunJob(_self):
-            callback(*args)
-            _self.Stop()
-
-        from . import znc
-        FakeTimer = type(callback.__name__, (znc.Timer,), dict(RunJob=RunJob))
-        self.module.CreateTimer(FakeTimer, interval=int(delay), cycles=1,
-                                label=callback.__name__,
-                                description=repr(callback))
+        """This is actually ``call_soon``"""
+        assert delay == 0
+        callback(*args)
 
     def get_debug(self):
         return False
