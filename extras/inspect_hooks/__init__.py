@@ -23,6 +23,8 @@ else:
 
 class InspectHooks(znc.Module):
     module_types = [znc.CModInfo.UserModule]
+    args_help_text = "LOGFILE=<path> LOG_RAW=<bool> LOG_OLD_HOOKS=<bool>"
+    has_args = True
     logfile = None
     log_raw = False
     log_old_hooks = False
@@ -50,14 +52,19 @@ class InspectHooks(znc.Module):
 
     def _OnLoad(self, argstr, message):
         #
-        msg = []
+        if self.normalize_onner is None:
+            message.s = ("Copy or link commonweal.py and ootil.py from Signal "
+                         "into this package's dir. Or just load Signal.")
+            return False
         #
-        commonweal.update_module_attributes(self, str(argstr))
+        commonweal.update_module_attributes(self, str(argstr), "inspecthooks_")
         if znc_version < (1, 7):
             self.log_old_hooks = False
         #
         if self.logfile is None:
-            raise ValueError("Must pass LOGFILE as arg or env var")
+            message.s = ("LOGFILE is required. Pass as module arg or export "
+                         "INSPECTHOOKS_LOGFILE to ZNC's environment.")
+            return False
         get_logger.LOGFILE = open(self.logfile, "w")
         self.logger = get_logger(self.__class__.__name__)
         self.logger.setLevel("DEBUG")
@@ -65,7 +72,6 @@ class InspectHooks(znc.Module):
         #
         self._hook_data = {}
         #
-        message.s = "; ".join(msg)
         return True
 
     def _OnShutdown(self):
@@ -177,11 +183,4 @@ class InspectHooks(znc.Module):
         return update_wrapper(handle_onner, onner)  # <- useless, for now
 
 
-if _normalize_onner:
-    inspect_hooks = InspectHooks
-else:
-    class inspect_hooks(znc.Module):
-        def OnLoad(self, argstr, message):
-            message.s = ("Copy or link Signal/commonweal.py and "
-                         "Signal/ootil.py into package dir or load Signal")
-            return False
+inspect_hooks = InspectHooks
