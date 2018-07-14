@@ -478,7 +478,7 @@ class Signal(znc.Module):
             normalized = self.post_normalize(name, normalized)
         except Exception:
             self.print_traceback()
-            return znc.CONTINUE
+            return
         if self.debug:
             from .ootil import OrderedPrettyPrinter as OrdPP
             pretty = OrdPP().pformat(normalized)
