@@ -28,23 +28,19 @@ class InspectHooks(znc.Module):
     log_old_hooks = False
     normalize_onner = _normalize_onner
 
-    def __new__(cls, *args, **kwargs):
-        """Map 'OnHook' key to self._OnHook() in instance dict"""
-        # TODO add comment/reminder of why this isn't in __init__.
-        new_self = super().__new__(cls, *args, **kwargs)
-        new_self.__dict__.update(
-            {m.lstrip("_"): getattr(new_self, m) for m in dir(new_self) if
-             m.startswith("_On")}
-        )
-        return new_self
-
     def __getattribute__(self, name):
-        """Intercept calls to On* methods for learning purposes"""
+        """Intercept calls to On* methods for learning purposes
+
+        Wrap all On* methods with args inspector except those that begin
+        with a single leading underscore.
+
+        See ``test_intercept_hooks`` in tests/test_extras.py
+        """
         candidate = super().__getattribute__(name)
         if name.startswith("On"):
             try:
-                return self.__dict__[name]
-            except KeyError:
+                candidate = super().__getattribute__(f"_{name}")
+            except AttributeError:
                 return self._wrap_onner(candidate)
         return candidate
 
