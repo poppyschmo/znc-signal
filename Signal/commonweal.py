@@ -41,6 +41,12 @@ def get_deprecated_hooks(on_hooks=None):
 def get_cmess_helpers():
     r"""Helpers for dealing with CMessage objects
 
+    This only applies to version 1.7.0 exactly. Issue has been fixed in
+    main 1.7.x branch::
+
+        * 8eebdf75 Slightly cleaner way to fix #1543
+        * 11fb4288 Fix VCString return values in modpython
+
     >>> mymsg = znc.CMessage(":irc.znc.in PONG irc.znc.in test_server")
     >>> mymsg.GetParams()  # doctest: +ELLIPSIS +SKIP
     (<Swig Object of type 'unknown' at 0x...>, <Swig Object ...>)
@@ -53,13 +59,10 @@ def get_cmess_helpers():
     True
 
     Note: running the above without the ``+SKIP`` directive produces
-    this log message::
+    this in the log::
 
         swig/python detected a memory leak of type 'unknown', ...
             no destructor found.
-
-    Actually, the lack of log formatting suggests it's just dumped
-    straight to the out stream.
     """
     if not hasattr(znc, "CMessage"):
         return None
@@ -75,12 +78,15 @@ def get_cmess_helpers():
     return cmess_helpers_NT(types, _get_params)
 
 
-# Versions 1.7.0-rc1 to 1.7.1
+# This is only needed for versions 1.7.0-rc1 to 1.7.1
 def _get_params(cm):
     """Temporary kludge for CMessage.GetParams()"""
     # TODO verify this is no longer needed in 1.7.1. See docstring in
     # get_cmess_helpers, above, for explanation.
     params = cm.GetParams()
+    if not params or isinstance(params[0], str) or znc_version > (1, 7, 0):
+        return params
+    #
     vout = []
     for i, p in enumerate(params):
         p.disown()  # <- makes mem leak msg go away; no idea why
