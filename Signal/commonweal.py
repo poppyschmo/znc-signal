@@ -10,8 +10,20 @@ Needed objects can be reached via instance args ("self").
 """
 from . import znc
 
-znc_version_str = znc.CZNC.GetVersion()
-znc_version = tuple(map(int, znc_version_str.partition("-")[0].split(".")))
+
+def get_version(version_string, extra=None):
+    """Return ZNC version as tuple, e.g., (1, 7, 0)"""
+    # Unsure of the proper way to get the third ("revision") component in
+    # major.minor.revision and whether this is synonymous with VERSION_PATCH
+    #
+    # TODO learn ZNC's versioning system; For now, prefer manual feature tests
+    # instead of comparing last component
+    #
+    if extra is not None:  # see test_version for an example
+        version_string = version_string.replace(extra, "", 1)
+    from math import inf
+    return tuple(int(d) if d.isdigit() else inf for
+                 d in version_string.partition("-")[0].split(".", 2))
 
 
 def get_deprecated_hooks(on_hooks=None):
@@ -226,5 +238,7 @@ def normalize_onner(inst, name, args_dict, ensure_net=False):
     return out_dict
 
 
+znc_version = get_version(znc.CZNC.GetVersion(),
+                          getattr(znc, "VersionExtra", None))
 deprecated_hooks = get_deprecated_hooks()
 cmess_helpers = get_cmess_helpers()

@@ -89,3 +89,20 @@ def test_unescape_unicode_char():
     with pytest.raises(ValueError) as exc_info:
         uuc("U+")
     assert exc_info.value.args[0] == int_msg
+
+
+def test_version():
+    from Signal.commonweal import get_version
+    from math import inf
+    assert get_version("1.7.0") == (1, 7, 0)
+    assert get_version("1.7.0-rc1") == (1, 7, 0)
+    assert get_version("1.7") == (1, 7)
+    assert get_version("1.7.x") == (1, 7, inf)
+    # Note: the SHA abbrev happens to be 7 xdigits, but that's likely not
+    # guaranteed. The docker-image "vcs-ref" label holds the full SHA.
+    extra = "+docker-git-1.7.x-znc-1.7.0-50-g2058aa0"
+    #                          ^^^^^^^^^^^^^^^^^^^^^ git-describe
+    #                    ^^^^^^ TRAVIS_BRANCH + sep
+    #        ^^^^^^^^^^^^ VERSION_EXTRA
+    assert get_version("1.7.x" + extra) == (1, 7, inf)
+    assert get_version("1.7.x", extra) == (1, 7, inf)
