@@ -275,6 +275,14 @@ def timestr2dt(in_string):
     >>> timestr2dt(dt.isoformat()) == timestr2dt(str(dt)) == dt
     True
 
+    >>> dt = timestr2dt("2014-05-01 12:00:00.123Z")
+    >>> dt  # doctest: +ELLIPSIS
+    datetime.datetime(2014, 5, 1, 12, 0, 0, 123000, tzinfo=....utc)
+    >>> print(dt)
+    2014-05-01 12:00:00.123000+00:00
+    >>> timestr2dt(dt.isoformat()) == timestr2dt(str(dt)) == dt
+    True
+
     >>> dt = timestr2dt("2014-05-01 12:00:00.123456+0000")
     >>> dt  # doctest: +ELLIPSIS
     datetime.datetime(2014, 5, 1, 12, 0, 0, 123456, tzinfo=....utc)
@@ -318,6 +326,8 @@ def timestr2dt(in_string):
     TODO add exceptions, different locale, etc.
     """
     from datetime import datetime
+    if in_string.endswith("Z"):
+        in_string = "{}+00:00".format(in_string[:-1])
     rest = in_string
     parts = []
     try:
