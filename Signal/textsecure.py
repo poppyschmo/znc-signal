@@ -850,29 +850,24 @@ class Signal(znc.Module):
                 self.put_pretty(body, where="PutClient", fmt=fmt,
                                 putters=session["network"].GetClients())
                 return
-            # TODO check if this is doable in 1.6; also if there's any
-            # advantage to using the CMessage form for AddLine, etc.
+            # TODO check if this is doable in 1.6
             if self.znc_version < (1, 7):
                 return
             #
             # Could join chan here, but better reserved for explicit command
             if target.startswith("#"):
-                fmt = f":{source}!Signal@znc.in PRIVMSG {target} :{{text}}"
                 found = session["network"].FindChan(target)
             else:
-                # TODO see if it's possible to impersonate the client-side of a
-                # query for playback (this is kind of sad)
-                # See <http://defs.ircdocs.horse/info/selfmessages.html>
-                fmt = (f":{target}!Signal@znc.in PRIVMSG {target} "
-                       f":<\x02{source}\x02> {{text}}")
+                # CClient::HasSelfMessage
+                # <http://defs.ircdocs.horse/info/selfmessages.html>
                 found = session["network"].FindQuery(target)
                 if not found:
                     found = session["network"].AddQuery(target)
-            buf = None
             if found:
-                buf = found.GetBuffer()
-            if buf:
-                buf.AddLine(fmt, body)
+                fmt = f":{source}!Signal@znc.in PRIVMSG {target} :{{text}}"
+                # Could use AddBuffer but would have to make a CMessage object
+                # beforehand (string form is deprecated)
+                found.GetBuffer().AddLine(fmt, body)
         elif self.debug:
             self.logger.debug("Fell through; request: "
                               f"{request}, session: {session}")
