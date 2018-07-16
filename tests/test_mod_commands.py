@@ -130,7 +130,7 @@ def test_cmd_select(signal_stub):
     from dummy_conf import json_full
     from test_config import inject_config_version
     sig = signal_stub
-    UN = sig.expand_string("%user%")  # <- "testdummy"
+    UN = sig.GetUser().GetUserName()  # <- "testdummy"
     #
     sig.nv[UN] = inject_config_version(restring(json_full))
     out_one_dot = dedent("""\
@@ -208,7 +208,7 @@ def test_cmd_update(signal_stub):
     from test_config import inject_config_version
     sig = signal_stub
     cmd_update = wrap_mod_command(sig, sig.cmd_update, True)
-    UN = sig.expand_string("%user%")  # <- "testdummy"
+    UN = sig.GetUser().GetUserName()  # <- "testdummy"
     sig.nv[UN] = inject_config_version(restring(json_full))
     # Config is auto-loaded when not in debug mode
     assert sig.config is not None and not sig.debug

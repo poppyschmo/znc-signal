@@ -837,7 +837,7 @@ def test_manage_config(signal_stub_debug):
     mydummy = deepcopy(dummy.peeled)  # graft custom template on dummy
     mydummy["templates"]["custom"] = {"focus_char": "\\u2713"}
     some_backup = restring(mydummy)
-    UN = sig.expand_string("%user%")  # <- "testdummy"
+    UN = sig.GetUser().GetUserName()  # <- "testdummy"
     #
     # Required item missing: /settings/config_version
     sig.nv[UN] = some_backup

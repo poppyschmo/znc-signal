@@ -234,14 +234,13 @@ if not hasattr(_znc, "IS_MOCK"):
 
 class SignalStub(Signal):
     _using_debug = False
-    _network = "dummynet"
-    _user = "testdummy"
-    _nick = "dummy"
-    _client_ident = "dummyclient"
+    _network = "dummynet"           # CClient.GetFullName
+    _user = "testdummy"             # CUser.GetUserName
+    _nick = "dummy"                 # CUser.GetNick
+    _client_ident = "dummyclient"   # CClient.GetFullName
     _argstring = ""
     _buffer = None
     _buffer_pos = 0
-    __new__ = object.__new__
 
     def __init__(self):
         if not self._using_debug:
@@ -264,16 +263,6 @@ class SignalStub(Signal):
         if line == " ":
             line = ""
         self._buffer_pos += self._buffer.write(line + "\n")
-
-    def expand_string(self, string):
-        # FIXME for now, involving this method causes problems. Bottom line:
-        # more ZNC knowhow is required for simulating Module.ExpandString.
-        # Version, mod-type, calling hook all affect the result, which may
-        # include ignored or null substitutions.
-        for pat, sub in (("%user%", self._user), ("%network%", self._network),
-                         ("%nick%", self._nick)):
-            string = string.replace(pat, sub)
-        return string
 
     def _read(self):
         """Return contents of string buffer (not num bytes read)

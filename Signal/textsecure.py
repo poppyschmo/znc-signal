@@ -80,18 +80,6 @@ class Signal(znc.Module):
                     line = fmt.format(line)
                 getattr(putter, where)(*args, line or " ")
 
-    def expand_string(self, string):
-        string = self.ExpandString(string)
-        if self.znc_version < (1, 7, 0):
-            # Shouldn't be used in callbacks; only in module hooks
-            try:
-                network = self.GetNetwork().GetName()
-            except AttributeError:
-                network = "%network%"
-            for pat, sub in (("%empty%", ""), ("%network%", network)):
-                string = string.replace(pat, sub)
-        return string
-
     def get_client(self, name):
         """Retrieve a single client by name
 
@@ -856,7 +844,7 @@ class Signal(znc.Module):
             return
         if target and body is not None:
             session["network"].PutIRC(f"PRIVMSG {target} :{body}")
-            source = self.expand_string("%nick%")
+            source = self.GetUser().GetNick()
             if session["network"].GetClients():
                 fmt = f":{source}!Signal@znc.in PRIVMSG {target} :{{}}"
                 self.put_pretty(body, where="PutClient", fmt=fmt,
@@ -1055,7 +1043,7 @@ class Signal(znc.Module):
                 flattened[cat] = bcd.peel(peel=peel)
             return flattened
         #
-        nvid = self.expand_string("%user%")
+        nvid = self.GetUser().GetUserName()
         if not hasattr(self, "_nv_undo_stack"):
             from collections import deque
             self._nv_undo_stack = deque()

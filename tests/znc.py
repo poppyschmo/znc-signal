@@ -18,12 +18,16 @@ class ModuleNV(dict):
 class Module:
 
     def GetUser(self):
-        return CUser()
+        user = CUser()
+        user._user = self._user
+        user._nick = self._nick
+        return user
 
     def GetNetwork(self):
-        return self._network
+        """Called by hook-args normalizer"""
 
     def GetClient(self):
+        """Should return None unless called from certain hooks"""
         client = CClient()
         client._full_name = "{}@{}/{}".format(self._user,
                                               self._client_ident,
@@ -46,6 +50,12 @@ class CUser:
 
     def GetNetworks(self):
         return ()
+
+    def GetUserName(self):
+        return self._user
+
+    def GetNick(self):
+        return self._nick
 
 
 class CClient:
