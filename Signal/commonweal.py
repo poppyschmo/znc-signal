@@ -184,13 +184,6 @@ def normalize_onner(inst, name, args_dict, ensure_net=False):
         # SWIG timeval ptr obj, which can't be dereferenced to a sys/time.h
         # timeval. If it were made usable, we could forgo calling time().
         #
-        # NOTE originally, these were kept json-serializable for latent
-        # logging with details not conveyed by reprs -- any attempt to
-        # persist swig objects result(ed) in a crash once this frame was
-        # popped, regardless of any disown/thisown stuff. After changing
-        # logging/debugging approach, there's no longer any reason not to
-        # include non-swig objects in "_hook_data".
-        # XXX ^^^^^^^^^^^^^^^ move above ^^^^^^^^^^^^^^ to a commit message
         # NOTE CHTTPSock (and web templates) are a special case, just
         # ignore, for now (logger will complain of 'unhandled arg')
         if isinstance(v, str):
@@ -207,12 +200,10 @@ def normalize_onner(inst, name, args_dict, ensure_net=False):
             return unempty(name=str(v.GetName()) or None,
                            detached=v.IsDetached())
         elif isinstance(v, znc.CNick):
-            # TODO see src to find out how nickmask differs from hostmask
             return unempty(nick=v.GetNick(),
                            ident=v.GetIdent(),
                            host=v.GetHost(),
                            perms=v.GetPermStr(),
-                           nickmask=v.GetNickMask(),
                            hostmask=v.GetHostMask())
         elif isinstance(v, znc.MCString):
             return unempty(**v)

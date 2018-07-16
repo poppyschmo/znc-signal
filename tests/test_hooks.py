@@ -203,7 +203,6 @@ get_rel_params = []
 ocm = {'Nick': {'nick': 'tbo',
                 'ident': 'testbot',
                 'host': 'znc.in',
-                'nickmask': 'tbo!testbot@znc.in',
                 'hostmask': 'tbo!testbot@znc.in'},
        'Channel': {'name': '#test_chan',
                    'detached': False},
@@ -219,7 +218,6 @@ octm = {'msg': {'type': 'Text',
                 'nick': {'nick': 'tbo',
                          'ident': 'testbot',
                          'host': 'znc.in',
-                         'nickmask': 'tbo!testbot@znc.in',
                          'hostmask': 'tbo!testbot@znc.in'},
                 'channel': {'name': '#test_chan',
                             'detached': False},
@@ -270,8 +268,7 @@ def test_get_relevant(hook_name, hook_data, signal_stub_debug):
             "hostmask": "tbo!testbot@znc.in",
             "ident": "testbot",
             "network": "testnet",
-            "nick": "tbo",
-            "nickmask": "tbo!testbot@znc.in"}
+            "nick": "tbo"}
     if hook_name.startswith("OnChan"):
         chan_flat = dict(base)
         chan_flat.update({"channel": "#test_chan",
@@ -331,7 +328,6 @@ def test_reckon(signal_stub_debug):
            'ident': 'testbot',
            'network': 'testnet',
            'nick': 'tbo',
-           'nickmask': 'tbo!testbot@znc.in',
            'context': '#test_chan'}
     assert sig.get_relevant(octm) == rel
     #
