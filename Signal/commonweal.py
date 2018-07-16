@@ -214,6 +214,8 @@ def normalize_onner(inst, name, args_dict, ensure_net=False):
                            perms=v.GetPermStr(),
                            nickmask=v.GetNickMask(),
                            hostmask=v.GetHostMask())
+        elif isinstance(v, znc.MCString):
+            return unempty(**v)
         # Covers CPartMessage, CTextMessage
         elif hasattr(znc, "CMessage") and isinstance(v, znc.CMessage):
             return unempty(type=cm_util.types(v.GetType()).name,
@@ -226,7 +228,8 @@ def normalize_onner(inst, name, args_dict, ensure_net=False):
                            target=extract(getattr(v, "GetTarget",
                                                   None.__class__)()),
                            text=extract(getattr(v, "GetText",
-                                                None.__class__)()))
+                                                None.__class__)()),
+                           tags=extract(v.GetTags()))
         elif v is not None:
             inst.logger.debug(f"Unhandled arg: {k!r}: {v!r}")
     #
