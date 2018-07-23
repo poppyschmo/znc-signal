@@ -27,13 +27,12 @@ def get_version(version_string, extra=None):
 
 
 def get_deprecated_hooks(on_hooks=None):
+    """Create a set of all legacy hook names"""
     if znc_version < (1, 7, 0):
         return None
     if not on_hooks:  # used by /tests/test_hooks.py
         on_hooks = {a for a in dir(znc.Module) if a.startswith("On")}
-    depcands = {o.replace("TextMessage", "Msg")
-                .replace("PlayMessage", "PlayLine")
-                .replace("Message", "") for
+    depcands = {degenerate_cm_hook_name(o) for
                 o in on_hooks if o.endswith("Message")}
     return on_hooks & depcands
 
@@ -137,6 +136,45 @@ def get_first(data, *keys):
             return cand
 
 
+def degenerate_cm_hook_name(name):
+    return (name.replace("TextMessage", "Msg")
+            .replace("PlayMessage", "PlayLine")
+            .replace("Message", ""))
+
+
+def get_deprecated_hooks_map():
+    """Return map of CMessage-hook names to their pre-1.7 counterparts
+    """
+    hooks = (a for a in dir(znc.Module) if a.startswith("On"))
+    tenders = ((h, degenerate_cm_hook_name(h)) for
+               h in hooks if h.endswith("Message"))
+    return dict((k, v) for k, v in tenders if v in deprecated_hooks)
+
+
+def is_channer(name):
+    """Return True if hook is 'channel-related' (CMessage only)
+
+    This is a temporary safety check for ``normalize_onner``, just in
+    case the issue described below applies to hooks other than
+    ``OnSendToClientMessage``
+    """
+    # TODO find a way to reproduce behavior described in commit message
+    # (from this func's first appearance) and report upstream.
+    #
+    if name in ("OnSendToClientMessage",):
+        return False
+    if not legacmess_hooks:
+        legacmess_hooks.update(get_deprecated_hooks_map())
+    if name not in legacmess_hooks:
+        return False
+    onner = getattr(znc.Module, legacmess_hooks[name], None)
+    if onner is None:
+        return False
+    from inspect import signature
+    sig = signature(onner)
+    return any("chan" in p.lower() for p in sig.parameters)
+
+
 def normalize_onner(inst, name, args_dict, ensure_net=False):
     """Preprocess hook arguments
 
@@ -154,11 +192,19 @@ def normalize_onner(inst, name, args_dict, ensure_net=False):
                 and (v or not isinstance(v, Sized))}
     #
     def extract(v):  # noqa: E306
-        """Save anything relevant to conditions tests"""
+        """Save data items relevant to conditions tests or inspection"""
         # TODO add CMessage::GetTime() when implemented. #1578
         #
-        # NOTE CHTTPSock (and web templates) are a special case, just
-        # ignore, for now (logger will complain of 'unhandled arg')
+        # NOTE for now, the following are simply ignored. The logger, if
+        # active, will complain of an 'unhandled arg':
+        #
+        #   - vChans (relatively common: OnJoinMessage, etc.)
+        #   - CHTTPSock (and web templates)
+        #
+        # NOTE the msg object passed to OnUserJoinMessage can't be used to call
+        # GetChan(). Use GetTarget() to retrieve the same sChannel string
+        # passed to OnUserJoin.
+        #
         if isinstance(v, str):
             return v
         elif isinstance(v, (znc.String, znc.CPyRetString)):
@@ -170,7 +216,9 @@ def normalize_onner(inst, name, args_dict, ensure_net=False):
                            away=v.IsIRCAway(),
                            client_count=len(v.GetClients()))
         elif isinstance(v, znc.CChan):
-            return unempty(name=str(v.GetName()) or None,
+            if k == "msg" and not is_channer(name):
+                return None
+            return unempty(name=v.GetName() or None,
                            detached=v.IsDetached())
         elif isinstance(v, znc.CNick):
             return unempty(nick=v.GetNick(),
@@ -209,6 +257,7 @@ def normalize_onner(inst, name, args_dict, ensure_net=False):
     if ensure_net and not get_first(out_dict, "network", "Network"):
         net = inst.GetNetwork()
         if net:
+            k = None
             out_dict["network"] = extract(net)
     return out_dict
 
@@ -216,4 +265,4 @@ def normalize_onner(inst, name, args_dict, ensure_net=False):
 znc_version = get_version(znc.CZNC.GetVersion(),
                           getattr(znc, "VersionExtra", None))
 deprecated_hooks = get_deprecated_hooks()
-cmess_helpers = get_cmess_helpers()
+legacmess_hooks = {}
