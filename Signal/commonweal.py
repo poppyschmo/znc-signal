@@ -204,7 +204,8 @@ def normalize_onner(inst, name, args_dict, ensure_net=False):
                            perms=v.GetPermStr(),
                            hostmask=v.GetHostMask())
         elif isinstance(v, znc.MCString):
-            return unempty(**v)
+            if znc_version > (1, 7, 0):  # ZNC #1543
+                return unempty(**v)
         # Covers CPartMessage, CTextMessage
         elif hasattr(znc, "CMessage") and isinstance(v, znc.CMessage):
             return unempty(type=cm_util.types(v.GetType()).name,
