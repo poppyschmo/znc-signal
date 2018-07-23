@@ -191,9 +191,9 @@ def normalize_onner(inst, name, args_dict, ensure_net=False):
         elif isinstance(v, (znc.String, znc.CPyRetString)):
             return str(v)
         elif isinstance(v, znc.CClient):
-            return str(v.GetFullName())
+            return v.GetFullName()
         elif isinstance(v, znc.CIRCNetwork):
-            return unempty(name=str(v.GetName()) or None,
+            return unempty(name=v.GetName() or None,
                            away=v.IsIRCAway(),
                            client_count=len(v.GetClients()))
         elif isinstance(v, znc.CChan):

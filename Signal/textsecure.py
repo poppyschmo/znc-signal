@@ -610,7 +610,7 @@ class Signal(znc.Module):
         # Update instance attrs with argstr and envvars; this is only called
         # here, so there's no reason to patch class with yet more funcs
         from .commonweal import update_module_attributes
-        update_module_attributes(self, str(argstr), "signalmod_")
+        update_module_attributes(self, argstr, "signalmod_")
         #
         if not self.datadir:
             self.datadir = self.GetSavePath()

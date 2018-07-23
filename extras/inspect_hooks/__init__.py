@@ -57,7 +57,7 @@ class InspectHooks(znc.Module):
                          "into this package's dir. Or just load Signal.")
             return False
         #
-        commonweal.update_module_attributes(self, str(argstr), "inspecthooks_")
+        commonweal.update_module_attributes(self, argstr, "inspecthooks_")
         if znc_version < (1, 7):
             self.log_old_hooks = False
         #
