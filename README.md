@@ -38,9 +38,14 @@ registration/verification) via
 `docker-exec`.<sup>[6](#user-content-chicken_egg)</sup>
 
 ### The ZNC module
-There's no need for `pip`/`make`/`setup.py`. Just copy the [`/Signal`](Signal)
-directory to the host-side Docker volume under the `/modules` subdirectory.
-Load the module (remembering the capital "S").
+1. Clone the repo somewhere convenient
+   ```console
+   >$ git clone --recurse-submodules \
+       https://github.com/poppyschmo/znc-signal.git
+   ```
+2. Copy the [`/Signal`](Signal) directory to the host-side Docker volume under
+   the `/modules` subdirectory
+3. Load the module (remembering the capital "S")
 
 
 ### Getting a number
