@@ -17,7 +17,7 @@ def get_version(version_string, extra=None):
     # major.minor.revision and whether this is synonymous with VERSION_PATCH
     #
     # TODO learn ZNC's versioning system; For now, prefer manual feature tests
-    # instead of comparing last component
+    # instead of comparing last component; <https://wiki.znc.in/Branches>
     #
     if extra is not None:  # see test_version for an example
         version_string = version_string.replace(extra, "", 1)
@@ -180,9 +180,7 @@ def normalize_onner(inst, name, args_dict, ensure_net=False):
     #
     def extract(v):  # noqa: E306
         """Save anything relevant to conditions tests"""
-        # TODO monitor CMessage::GetTime; as of 1.7.0-rc1, it returns a
-        # SWIG timeval ptr obj, which can't be dereferenced to a sys/time.h
-        # timeval. If it were made usable, we could forgo calling time().
+        # TODO add CMessage::GetTime() when implemented. #1578
         #
         # NOTE CHTTPSock (and web templates) are a special case, just
         # ignore, for now (logger will complain of 'unhandled arg')
