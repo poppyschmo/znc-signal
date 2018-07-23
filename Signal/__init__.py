@@ -16,51 +16,30 @@ you might have mess with file permissions::
 
 """
 
+import os
 import sys
-import znc
-
-
-def _zip_inject(pack_name, glob_pat=None):
-    """Find and load a wheel package from the ususal ZNC module dirs
-
-    Doesn't seem like ZNC likes dynamically loading zip archives
-    inserted into ``sys.path``. Might be ``imp``-related.
-    """
-    import os
-    from glob import iglob
-    from itertools import chain
-    from zipimport import zipimporter
-    from importlib import invalidate_caches
-    #
-    if glob_pat is None:
-        glob_pat = "**/%s*.whl" % pack_name
-    #
-    dirs = chain.from_iterable(znc.CModules.GetModDirs())
-    candidates = chain.from_iterable(
-        iglob(os.path.join(p, glob_pat), recursive=True) for p in dirs
-    )
-    #
-    candidate = next(candidates)
-    invalidate_caches()
-    try:
-        loader = zipimporter(candidate)
-        m = loader.load_module(pack_name)
-        assert sys.modules[pack_name] is m
-    except Exception as exc:
-        candidates = set(candidates) - {candidate}
-        if not candidates:
-            raise
-        msg = ("Problem loading package archive %r. Possibly related to "
-               "trying %r instead of %r. Also see previous exception.")
-        msg = msg % (pack_name, candidate, candidates)
-        raise RuntimeError(msg) from exc
-
-
-# Load the DBus library
-_zip_inject("jeepney")
+import znc  # noqa: F401
 
 if sys.version_info < (3, 6):
     raise RuntimeError("This module requires Python 3.6+")
+
+jeepney_lib_path = os.path.join(os.path.dirname(__file__), "lib/jeepney")
+if os.path.isdir(jeepney_lib_path) and sys.path[0] != jeepney_lib_path:
+    while jeepney_lib_path in sys.path[:]:
+        sys.path.remove(jeepney_lib_path)
+    sys.path.insert(0, jeepney_lib_path)
+
+try:
+    from jeepney.auth import make_auth_anonymous  # noqa: F401
+except ImportError as exc:
+    if "make_auth_anonymous" in repr(exc.args):
+        errmsg = ("This module requires a patched version of jeepney; "
+                  "see .gitmodules for the URL")
+        raise ImportError(errmsg) from exc
+    else:
+        raise
+else:
+    del make_auth_anonymous
 
 from .ootil import GetLogger  # noqa E402
 get_logger = GetLogger()
