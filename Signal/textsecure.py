@@ -11,7 +11,6 @@ class Signal(znc.Module):
     has_args = True
     logfile = None      # str, $LOGFILE, get_logger.LOGFILE is file-like obj
     datadir = None      # str, $DATADIR or path from CModule::GetSavePath()
-    env = None          # dict, copy of environ w. SIGNALMOD_ prefixes dropped
     tz = None           # datetime.timezone
     config = None       # config_NT, members are BaseConfigDict subclasses
     debug = False
