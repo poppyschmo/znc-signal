@@ -38,60 +38,35 @@ def get_deprecated_hooks(on_hooks=None):
     return on_hooks & depcands
 
 
-def get_cmess_helpers():
-    r"""Helpers for dealing with CMessage objects
+def get_cmess_types():
+    r"""Convenience helper for CMessage types
 
-    This only applies to version 1.7.0 exactly. Issue has been fixed in
-    main 1.7.x branch::
-
-        * 8eebdf75 Slightly cleaner way to fix #1543
-        * 11fb4288 Fix VCString return values in modpython
-
+    >>> t = get_cmess_types()
     >>> mymsg = znc.CMessage(":irc.znc.in PONG irc.znc.in test_server")
-    >>> mymsg.GetParams()  # doctest: +ELLIPSIS +SKIP
-    (<Swig Object of type 'unknown' at 0x...>, <Swig Object ...>)
-    >>> cmess_helpers.get_params(mymsg)
-    ('irc.znc.in', 'test_server')
-    >>> cmess_helpers.types(mymsg.GetType())
+    >>> t(mymsg.GetType())
     <CMessage::Type.Pong: 16>
-    >>> cmess_helpers.types(16) == cmess_helpers.types.Pong == \
-    ...     cmess_helpers.types["Pong"] == _
+    >>> t(16) == t.Pong == t["Pong"] == 16 == _
     True
-
-    Note: running the above without the ``+SKIP`` directive produces
-    this in the log::
-
-        swig/python detected a memory leak of type 'unknown', ...
-            no destructor found.
     """
-    if not hasattr(znc, "CMessage"):
-        return None
-
-    from collections import namedtuple
-    cmess_helpers_NT = namedtuple("CMessageHelpers", "types get_params")
-    cmess_helpers_NT.__doc__ += get_cmess_helpers.__doc__
-
-    from enum import Enum
-    types = Enum("CMessage::Type", ((k.split("_", 1)[-1], v) for k, v in
-                                    vars(znc.CMessage).items() if
-                                    k.startswith("Type_")))
-    return cmess_helpers_NT(types, _get_params)
-
-
-# This is only needed for versions 1.7.0-rc1 to 1.7.1
-def _get_params(cm):
-    """Temporary kludge for CMessage.GetParams()"""
-    # TODO verify this is no longer needed in 1.7.1. See docstring in
-    # get_cmess_helpers, above, for explanation.
-    params = cm.GetParams()
-    if not params or isinstance(params[0], str) or znc_version > (1, 7, 0):
-        return params
+    # TODO find out what the significance of these categories are (since
+    # they're often the same as commands; RFCs don't seem to list any similar
+    # groupings; if irrelevant to learning ZNC, remove
     #
-    vout = []
-    for i, p in enumerate(params):
-        p.disown()  # <- makes mem leak msg go away; no idea why
-        vout.append(cm.GetParam(i))
-    return tuple(vout)
+    # TODO (longterm) when learning about SWIG, see whether patching objects
+    # like znc.CMessage with custom objects (like this enum) is doable
+    # responsibly (likewise for wrappers to handle version-specific issues)
+    #
+    # Can't create global at import time because tests use fake znc with
+    # limited hooks inventory.
+    types = globals().get("_cmess_types")
+    if types:
+        return types
+    from enum import IntEnum
+    types = IntEnum("CMessage::Type", ((k.split("_", 1)[-1], v) for k, v in
+                                       vars(znc.CMessage).items() if
+                                       k.startswith("Type_")))
+    globals()["_cmess_types"] = types
+    return types
 
 
 def update_module_attributes(inst, argstr, namespace=None):
@@ -169,9 +144,9 @@ def normalize_onner(inst, name, args_dict, ensure_net=False):
     info from others, and save them in a normalized fashion for
     later use.
     """
-    cm_util = cmess_helpers
     from collections.abc import Sized  # has __len__
     out_dict = dict(args_dict)
+    cmess_types = get_cmess_types()
     #
     def unempty(**kwargs):  # noqa: E306
         return {k: v for k, v in kwargs.items() if
@@ -208,12 +183,13 @@ def normalize_onner(inst, name, args_dict, ensure_net=False):
                 return unempty(**v)
         # Covers CPartMessage, CTextMessage
         elif hasattr(znc, "CMessage") and isinstance(v, znc.CMessage):
-            return unempty(type=cm_util.types(v.GetType()).name,
+            return unempty(type=cmess_types(v.GetType()).name,
                            nick=extract(v.GetNick()),
                            client=extract(v.GetClient()),
                            channel=extract(v.GetChan()),
                            command=v.GetCommand(),
-                           params=cm_util.get_params(v),
+                           params=((znc_version > (1, 7, 0) or None)
+                                   and v.GetParams()),  # ZNC #1543
                            network=extract(v.GetNetwork()),
                            target=extract(getattr(v, "GetTarget",
                                                   None.__class__)()),

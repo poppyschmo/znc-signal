@@ -311,7 +311,8 @@ class Signal(znc.Module):
                                                        "Action")
                 from .commonweal import get_first
                 params = get_first(data, "params")
-                if data["msg"]["type"] != "Action" and len(params) > 1:
+                if (params and data["msg"]["type"] != "Action"
+                        and len(params) > 1):
                     assert relevant["body"] == " ".join(params[1:])
             if relevant.get("channel"):  # else params[0] is target (%nick%)
                 # In OnSendToClient, ``channel["name"]`` sometimes contains

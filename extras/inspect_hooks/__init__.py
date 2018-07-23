@@ -71,6 +71,7 @@ class InspectHooks(znc.Module):
         self.logger.debug("loaded, logging with: %r" % self.logger)
         #
         self._hook_data = {}
+        self.cmess_types = commonweal.get_cmess_types()
         #
         return True
 
@@ -102,10 +103,9 @@ class InspectHooks(znc.Module):
                 return False
             #
             if "msg" in args_dict:
-                cmt = getattr(commonweal.cmess_helpers, "types", None)
                 assert znc_version >= (1, 7, 0)
-                cmtype = cmt(args_dict["msg"].GetType())
-                if cmtype in (cmt.Ping, cmt.Pong):
+                cmtype = self.cmess_types(args_dict["msg"].GetType())
+                if cmtype in (self.cmess_types.Ping, self.cmess_types.Pong):
                     return False
             elif "sLine" in args_dict:
                 if znc_version >= (1, 7, 0):

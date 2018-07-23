@@ -16,18 +16,7 @@ module names in import statements::
         from spam import foo
 
 The normal way around this is to import the whole package, but we can't do that
-without a live ZNC instance or a built-in (non-test) shim.
-
-
-__init__.py
-    If adding tests that require a real ZNC instance, run the the doctests for
-    the ``CMessage`` helper, either via ``docker-exec`` or the telnet console
-    using pexpect::
-
-      >>> from Signal.commonweal import cmess_helpers      # doctest: +SKIP
-      >>> from doctest import \
-      ...     run_docstring_examples as run     # doctest: +SKIP
-      >>> run(cmess_helpers, globals())         # doctest: +SKIP
+without a live ZNC instance.
 """
 import pytest
 
