@@ -24,12 +24,12 @@ class Signal(znc.Module):
 
     def print_traceback(self, where=None):
         import sys
+        import traceback
         self.last_traceback = sys.exc_info()[-1]
         if where is None and self.debug:
-            # TODO try logging module's builtin traceback printer
-            self.logger.debug(znc.traceback.format_exc())
+            self.logger.debug(traceback.format_exc())
         elif hasattr(where, "write"):
-            znc.traceback.print_exc(file=where)
+            traceback.print_exc(file=where)
         else:
             etype, value, tb = sys.exc_info()
             self.put_pretty(f"\x02{etype.__name__}\x02: {value}", where)
