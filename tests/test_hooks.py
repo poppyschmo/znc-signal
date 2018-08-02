@@ -1,106 +1,11 @@
 # This file is part of ZNC-Signal <https://github.com/poppyschmo/znc-signal>,
 # licensed under Apache 2.0 <http://www.apache.org/licenses/LICENSE-2.0>.
 
-import os
-import ast
 import pytest
 from copy import deepcopy
-from conftest import signal_stub, signal_stub_debug, any_in, all_in
+from conftest import signal_stub, signal_stub_debug, all_in
 signal_stub = signal_stub  # quiet linter
 signal_stub_debug = signal_stub_debug
-
-# TODO checkout pre-1.7.0 commit and get total run count for all releases (like
-# --collect-only, but must manually count). If > 5, diff against latest
-# changes. Reason: in haste to accommodate 1.7.0 final, replaced some
-# loop-based tests with parametrized fixtures, but might have dropped coverage
-# the process.
-
-znc_url = "https://znc.in/releases/archive/znc-{rel}.tar.gz"
-pinned_releases = ("1.6.6", "1.7.0-rc1", "1.7.0", "1.7.1")
-
-
-class CullNonHooks(ast.NodeTransformer):
-    def visit_Assign(self, node):
-        return None
-
-    def visit_FunctionDef(self, node):
-        if node.name.startswith("On"):
-            return node
-
-
-def get_class_node(tree, cls_name):
-    for node in ast.walk(tree):
-        if isinstance(node, ast.ClassDef) and node.name == cls_name:
-            return node
-
-
-def get_hook_args(node):
-    """Look for Module in modpython script, return On*Method args node
-    """
-    assert node.name == "Module"
-    return dict(
-        (n.name, dict(vars(n.args), args=tuple(a.arg for a in n.args.args)))
-        for n in ast.iter_child_nodes(node) if
-        isinstance(n, ast.FunctionDef) and n.name.startswith("On")
-    )
-
-
-def retrieve_sources(release, base_dir):
-    # TODO look into using shutil instead of tarfile
-    from urllib.request import urlopen
-    import tarfile
-    with urlopen(znc_url.format(rel=release)) as flor:
-        with tarfile.open(mode="r:gz", fileobj=flor) as tfo:
-            tfo.extractall(base_dir)
-
-
-def read_source(base_dir, rel_path, release):
-    """Return file at <rel_path> from every release"""
-    # TODO re-obtain file if older than so many days; fairly limited without
-    # local git repo or github api key.
-    path = f"{base_dir}/znc-{release}/{rel_path.lstrip('/')}"
-    if not os.path.exists(path) or not os.stat(path).st_size:
-        retrieve_sources(release, base_dir)
-    if not os.path.exists(path):
-        source = None
-    else:
-        with open(path) as flo:
-            source = flo.read()
-    return source
-
-
-@pytest.fixture
-def base_dir(pytestconfig):
-    return pytestconfig.cache.makedir("releases")
-
-
-@pytest.fixture(params=pinned_releases)
-def cpymodule_node(base_dir, request):
-    release = request.param
-    source = read_source(base_dir, "modules/modpython/znc.py", release)
-    mod_tree = get_class_node(ast.parse(source), "Module")
-    return release, mod_tree
-
-
-@pytest.fixture
-def cpymodule_hook_args(cpymodule_node):
-    release, mod_tree = cpymodule_node
-    data = get_hook_args(mod_tree)
-    #
-    for hook_name, sig_data in dict(data).items():
-        assert sig_data["vararg"] is None
-        assert sig_data["kwonlyargs"] == []
-        assert sig_data["kw_defaults"] == []
-        assert sig_data["kwarg"] is None
-        if hook_name == "OnPart":
-            assert len(sig_data["defaults"]) == 1
-            assert sig_data["defaults"][0].value is None
-        else:
-            assert sig_data["defaults"] == []
-        # Overwrite sig_data with args; dict -> tuple(*signature - "self")
-        data[hook_name] = sig_data["args"][1:]
-    assert all(a.startswith("On") for a in data)
-    return release, data
 
 
 @pytest.fixture
@@ -121,65 +26,6 @@ def env_stub(signal_stub):
     del os.environ["SIGNALMOD_FOO"]
     if env_stub._buffer is not None:
         env_stub._buffer.close()
-
-
-def test_normalize_hook_args(base_dir, cpymodule_hook_args):
-    release, hook_args = cpymodule_hook_args
-    # Ensure 1.6.6 didn't suddenly add CMessage. Sad substitute for ensuring
-    # ``hasattr(znc, "CMessage")`` is False
-    from glob import glob
-    message_related = glob(f"{base_dir}/znc-{release}/**/Message.[hc]*",
-                           recursive=True)
-    #
-    # 1.6 stuff
-    if release.startswith("1.6"):
-        assert not message_related
-        one6_args = set.union(*(set(v) for v in hook_args.values()))
-        # Msg doesn't appear in any sub-1.7 sigs
-        assert "msg" not in one6_args
-    #
-    # 1.7+ stuff ("+" for now, we'll see)
-    else:
-        assert any_in([os.path.split(p)[-1] for p in message_related],
-                      "Message.h", "Message.cpp")
-        # Deal with outliers like Msg -> TextMessage and any future
-        # non-null/Message-analog pairing. Need an automated solution for
-        # flagging these in the future
-        outliers = {o.replace("TextMessage", "Msg") for o in
-                    hook_args if
-                    o.endswith("TextMessage") and
-                    o.replace("TextMessage", "Msg") in hook_args}
-        outliers |= {o.replace("PlayMessage", "PlayLine") for o in
-                     hook_args if
-                     o.endswith("PlayMessage") and
-                     o.replace("PlayMessage", "PlayLine") in hook_args}
-        deprecados = {o.replace("Message", "") for
-                      o in hook_args if
-                      o.endswith("Message") and
-                      o.replace("Message", "") in hook_args}
-        assert not deprecados & outliers  # obvious (delete me)
-        # Hard-code these to literal expect values for now
-        assert outliers == {'OnChanMsg', 'OnPrivMsg', 'OnUserMsg',
-                            'OnPrivBufferPlayLine', 'OnChanBufferPlayLine'}
-        #
-        # Note: this no longer *directly* affects the main Signal class because
-        # it no longer imports "deprecated_hooks". However, the inspector
-        # helper still relies on it, and that's used to keep things current.
-        from Signal.commonweal import get_deprecated_hooks
-        deprecated_hooks = get_deprecated_hooks(hook_args.keys())
-        assert deprecated_hooks == outliers | deprecados
-        #
-        # "Noisy" hooks (those containing "Raw" or "SendTo") don't contain
-        # "sLine" in 1.7+ unless deprecated
-        raw_sliners = {k for k, v in hook_args.items() if
-                       any_in(k, "Raw", "SendTo") and "sLine" in v}
-        assert not raw_sliners - deprecados
-        # TODO double check and replace previous with following, which holds
-        # and is stronger (meaning prev is obsolete because ``deprecados`` is
-        # meaningless without ``outliers`` and ``all_sliners`` includes
-        # ``raw_sliners``
-        all_sliners = {k for k, v in hook_args.items() if "sLine" in v}
-        assert not all_sliners - deprecated_hooks
 
 
 def test_OnLoad(env_stub):
