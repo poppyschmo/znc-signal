@@ -137,6 +137,9 @@ class InspectHooks(znc.Module):
                 pass
             else:
                 args_dict["client"] = client_name
+        #
+        # Add declaration type info from native CModule (znc_core)
+        args_dict["native_types"] = getattr(znc.CModule, name).__annotations__
         return args_dict
 
     def _wrap_onner(self, onner):
@@ -147,6 +150,23 @@ class InspectHooks(znc.Module):
             sig = signature(onner)
             bound = sig.bind(*args, **kwargs)
             name = onner.__name__
+            rv = None
+            # NOTE sig.return_annotation reflects the bound method from self,
+            # which doesn't have the SWIG annotations from znc_core's CModule
+            ret_anno = getattr(znc.CModule, name).__annotations__.get("return")
+            if ret_anno == "CModule::EModRet":
+                rv = znc.CONTINUE
+            elif ret_anno == "bool":
+                if name in ("OnBoot",):  # OnLoad is overridden
+                    rv = True  # otherwise None for web/cap stuff
+                else:
+                    assert any(s in name.lower() for s in ("web", "cap"))
+            else:
+                try:
+                    assert ret_anno == "void"
+                except AssertionError:
+                    self.print_traceback(f"Unexpected return type: {ret_anno}")
+            #
             relevant = None
             try:
                 relevant = self.screen_onner(name, bound.arguments)
@@ -157,7 +177,7 @@ class InspectHooks(znc.Module):
             except Exception:
                 self.print_traceback()
             if not relevant:
-                return znc.CONTINUE
+                return rv
             #
             self._hook_data[name] = normalized = None
             try:
@@ -166,15 +186,26 @@ class InspectHooks(znc.Module):
                 normalized = self.post_normalize(name, normalized)
             except Exception:
                 self.print_traceback()
-                return znc.CONTINUE
+                return rv
             OrdPP = ootil.OrderedPrettyPrinter
             pretty = OrdPP().pformat(normalized)
             self.logger.debug(f"{name}{sig}\n{pretty}")
             self._hook_data[name] = normalized
-            rv = onner(*args, **kwargs)
-            if not isinstance(rv, (type(None), type(znc.CONTINUE))):
-                self.logger.debug(f"{name} returned {rv!r} of type {type(rv)}")
-            return znc.CONTINUE
+            #
+            # NOTE consider only doing this when the instance has been patched;
+            # otherwise, its only use is for detecting upstream changes.
+            _rv = onner(*args, **kwargs)  # call real hook
+            if _rv == rv:
+                return rv
+            try:
+                assert _rv is None
+                assert name not in InspectHooks.__dict__
+                assert name in znc.Module.__dict__  # obvious
+            except (AssertionError):
+                self.print_traceback(f"Expected {rv!r} but {name} returned "
+                                     f"{_rv!r} of type {type(_rv)}")
+            finally:
+                return rv
         #
         # NOTE The attrs assigned by wraps aren't used by the log formatter;
         # see tests for changes to freestanding funcs bound to instances.
