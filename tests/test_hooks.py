@@ -103,10 +103,50 @@ opctcpm = deepcopy(opam)
 opctcpm["msg"]["text"] = "ACTION Oi"
 
 
+def get_relevant_legacy(data):
+    """Narrow/flatten normalized data to zone of interest
+
+    At this point, all data/data.msg values should (mostly) be
+    primitives (strings and ints).
+    """
+    from Signal.commonweal import get_first
+    #
+    def narrow(lookups):  # noqa: E306
+        common = {}
+        from collections import MutableMapping
+        for key, cands in lookups.items():
+            wanted = get_first(data, *cands)
+            if not wanted:
+                continue
+            if isinstance(wanted, MutableMapping):
+                _wanted = dict(wanted)
+                if "name" in wanted:
+                    common[key] = _wanted.pop("name")
+                if key in wanted:
+                    common[key] = _wanted.pop(key)
+                if _wanted != wanted:
+                    common.update(_wanted)
+            else:
+                common[key] = wanted
+        return common
+    #
+    # Common lookups
+    rosetta = {
+        # shallow
+        "body": ("text", "sMessage"),
+        # deep
+        "network": ("network", "Network"),
+        "channel": ("channel", "Channel", "sChannel", "Chan", "sChan"),
+        "nick": ("nick", "Nick"),
+    }
+    narrowed = narrow(rosetta)
+    narrowed["context"] = narrowed.get("channel") or narrowed["nick"]
+    return narrowed
+
+
 @pytest.mark.parametrize("hook_name,hook_data", get_rel_params)
-def test_get_relevant(hook_name, hook_data, signal_stub_debug):
-    sig = signal_stub_debug
-    rel = sig.get_relevant(hook_data)
+def test_get_relevant(hook_name, hook_data):
+    rel = get_relevant_legacy(hook_data)
     # NOTE: order doesn't matter for flattened/narrowed hook data
     base = {"away": False,
             "client_count": 1,
@@ -175,7 +215,7 @@ def test_reckon(signal_stub_debug):
            'network': 'testnet',
            'nick': 'tbo',
            'context': '#test_chan'}
-    assert sig.get_relevant(octm) == rel
+    assert get_relevant_legacy(octm) == rel
     #
     data_bak = deepcopy(rel)
     conds = sig.config.conditions

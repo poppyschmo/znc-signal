@@ -48,6 +48,10 @@ def test_basic_python_dict_comparisons():
     assert UserDict({}) == UserDict(None) == UserDict()
     #
     assert dict(range(0)) == dict() == dict([]) == dict("") == {}
+    #
+    # Insertion order during assignment is left-to-right
+    d1["three"] = d1["four"] = d1["five"] = 42
+    assert list(d1) == ["one", "two", "three", "four", "five"]
 
 
 def test_inner_maps():

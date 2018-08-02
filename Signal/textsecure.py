@@ -20,7 +20,7 @@ class Signal(znc.Module):
     approx = None               # cmdopts.AllParsed ~> argparse.ArgumentParser
     mod_commands = None         # dict, {cmd_<name> : method, ...}
     #
-    from .commonweal import normalize_onner, znc_version
+    from .commonweal import znc_version
 
     def print_traceback(self, where=None):
         import sys
@@ -137,7 +137,7 @@ class Signal(znc.Module):
         # merely placeholders, for now. <https://wiki.znc.in/Push>
         #
         # NOTE tracebacks for any exceptions raised here immediately follow the
-        # caller's ``normalize_onner`` dump in the log, so there's no need for
+        # caller's "relevant args" dump in the log, so there's no need for
         # descriptive assertion messages.
         #
         def expressed(path, expr_key, string):
@@ -257,12 +257,9 @@ class Signal(znc.Module):
                 return APPROVE  # <- conditions are OR'd together
         return REJECT
 
-    def route_verdict(self, name, data):
+    def route_verdict(self, name, relevant):
         """Prepare and send outgoing ZNC-to-Signal messages"""
-        # NOTE caller (Signal._wrap_onner) handles EModRet values
         from collections import defaultdict
-        #
-        relevant = self.get_relevant(data)
         #
         def format_message(rel_dict, template):  # noqa: E306
             """Expand vars in ``/templates/*/format``
@@ -298,41 +295,18 @@ class Signal(znc.Module):
                 )
             return msgfmt.format(**msgfmt_args)
         #
-        # TODO learn basic ZNC/IRC facts; erase once convinced
-        if self.debug:
-            params = None
-            if "msg" in data:
-                # Likely unneeded fallback for target and text. If never used,
-                # can disable altogether (not include in data.msg items).
-                # XXX ^^^^^^^^^^^^^^^^^^^^^^^^^ what does this mean? Gibberish
-                if "text" not in data["msg"]:
-                    assert data["msg"]["type"] not in ("Text",
-                                                       "Notice",
-                                                       "Action")
-                from .commonweal import get_first
-                params = get_first(data, "params")
-                if (params and data["msg"]["type"] != "Action"
-                        and len(params) > 1):
-                    assert relevant["body"] == " ".join(params[1:])
-            if relevant.get("channel"):  # else params[0] is target (%nick%)
-                # In OnSendToClient, ``channel["name"]`` sometimes contains
-                # control chars like 'A\x03\x00 ... \x02' (PART command)
-                assert relevant["channel"].startswith("#")
-                if params:
-                    assert params[0] == relevant["channel"]
-                assert relevant["context"] == relevant["channel"]
-            #
-            if self.config:
-                # Default must always run last
-                assert list(self.config.conditions).pop() == "default"
-                # Insertion ordering honors unsaved modifications
-                list(self.manage_config("view")["conditions"]) == \
-                    list(self.config.conditions)
+        # TODO move this to a test
+        if self.debug and self.config:
+            # Default must always run last
+            assert list(self.config.conditions).pop() == "default"
+            # Insertion ordering honors unsaved modifications
+            list(self.manage_config("view")["conditions"]) == \
+                list(self.config.conditions)
         #
         noneso = defaultdict(type(None), relevant)
         verdict = ("DROP", "PUSH")[self.reckon(noneso)]
         if self.debug:
-            reason = data["reckoning"] = noneso["reckoning"]
+            reason = noneso["reckoning"]
             self.logger.debug(f"Verdict: {verdict}, decision path: {reason}")
         if verdict == "DROP":
             return
@@ -378,157 +352,87 @@ class Signal(znc.Module):
         payload = (message, [], recipients)
         self.do_send("Signal", "sendMessage", cb, payload)
 
-    def get_relevant(self, data):
-        """Narrow/flatten normalized data to zone of interest
-
-        At this point, all data/data.msg values should (mostly) be
-        primitives (strings and ints).
-        """
-        from .commonweal import get_first
-        #
-        def narrow(lookups):  # noqa: E306
-            common = {}
-            from collections import MutableMapping
-            for key, cands in lookups.items():
-                wanted = get_first(data, *cands)
-                if not wanted:
-                    continue
-                if isinstance(wanted, MutableMapping):
-                    _wanted = dict(wanted)
-                    if "name" in wanted:
-                        common[key] = _wanted.pop("name")
-                    if key in wanted:
-                        common[key] = _wanted.pop(key)
-                    if _wanted != wanted:
-                        common.update(_wanted)
-                else:
-                    common[key] = wanted
-            return common
-        #
-        # Common lookups
-        rosetta = {
-            # shallow
-            "body": ("text", "sMessage"),
-            # deep
-            "network": ("network", "Network"),
-            "channel": ("channel", "Channel", "sChannel", "Chan", "sChan"),
-            "nick": ("nick", "Nick"),
-        }
-        narrowed = narrow(rosetta)
-        narrowed["context"] = narrowed.get("channel") or narrowed["nick"]
-        return narrowed
-
-    def post_normalize(self, name, data):
-        # Needed for config conditions involving client activity/actions. See
-        # also: note re CMessage.GetTime() above.
-        from datetime import datetime
-        justnow = datetime.now(self.tz)
-        data["time"] = justnow.isoformat()
-        #
-        # TODO these are just placeholders, for now. They don't actually run
-        # because this func only fires from Chan/Priv hooks
-        #
-        time_hooks = {"OnUserMsg", "OnUserTextMessage",  # rhs are 1.7+
-                      "OnUserAction", "OnUserActionMessage"}
-        if name in time_hooks:
-            from .commonweal import get_first
-            target = get_first(data, "target", "sTarget")
-            if target:
-                if not hasattr(self, "_user_targets"):
-                    self._user_targets = {}
-                self._user_targets[target] = dict(last_active=justnow,
-                                                  last_reply=justnow)
-        idle_hooks = {"OnUserJoin", "OnUserJoinMessage",  # rhs are 1.7+
-                      "OnUserPart", "OnUserPartMessage",
-                      "OnUserTopic", "OnUserTopicMessage",
-                      "OnUserTopicRequest"}
-        if name in time_hooks | idle_hooks:
-            self._idle = justnow
-        #
+    def get_relevant(self, msg):
+        """Extract items of interest from a CMessage object"""
+        nick = msg.GetNick()
+        net = msg.GetNetwork()
+        data = {"body": msg.GetText(),
+                "network": net.GetName(),
+                "away": net.IsIRCAway(),
+                "client_count": len(net.GetClients()),
+                "nick": nick.GetNick(),
+                "ident": nick.GetIdent(),
+                "host": nick.GetHost(),
+                "hostmask": nick.GetHostMask()}
+        chan = msg.GetChan()
+        if chan:
+            data["context"] = data["channel"] = chan.GetName()
+            data["detached"] = chan.IsDetached()
+        else:
+            data["context"] = data["nick"]
         return data
 
-    def get_hook_data(self, name, **kwargs):
-        """Perform common hook-related tasks
+    def clock_user_activity(self, name, dt_obj, target=None):
+        # XXX this is a placeholder for whatever prep work might be needed for
+        # time-based conditions involving user/client activity
+        #
+        # ZNC Push records the time whenever these are called:
+        #
+        # * OnUserJoinMessage
+        # * OnUserPartMessage
+        # * OnUserTopicMessage
+        # * OnUserTopicRequest  <- outlier (non-CMessage)
+        #
+        self._idle = dt_obj
+        #
+        # Likewise for these:
+        #
+        # * OnUserTextMessage
+        # * OnUserActionMessage
+        #
+        if target:
+            if not hasattr(self, "_user_targets"):
+                self._user_targets = {}
+            self._user_targets[target] = dict(last_active=dt_obj,
+                                              last_reply=dt_obj)
 
-        Formerly existed as a wrapper for decorated On* hooks; converted
-        to normal func for the sake of clarity.
-        """
-        #
-        if self.znc_version >= (1, 7) and "msg" not in kwargs:
-            return
-        #
-        self._hook_data[name] = normalized = None
-        # In 1.7+, the CMessage object already includes network info
-        wants_net = self.znc_version < (1, 7)
+    def handle_inbound_irc_msg(self, name, message):
+        """Wrangle hook-arg-data for traffic originating from IRC"""
         try:
-            normalized = self.normalize_onner(name, kwargs,
-                                              ensure_net=wants_net)
-            normalized = self.post_normalize(name, normalized)
+            relevant = self.get_relevant(message)
         except Exception:
             self.print_traceback()
             return
+        from datetime import datetime
+        now = datetime.now(self.tz)
         if self.debug:
             from .ootil import OrderedPrettyPrinter as OrdPP
-            pretty = OrdPP().pformat(normalized)
-            sig = ", ".join(kwargs)
-            self.logger.debug(f"{name}({sig})\n{pretty}")
-        self._hook_data[name] = normalized
-        #
+            pretty = OrdPP().pformat(dict(relevant, time=now.isoformat()))
+            self.logger.debug(f"{name}(msg)\n{pretty}")
+        relevant["time"] = now
         try:
-            self.route_verdict(name, normalized)  # void
-        except Exception:  # most likely shaky debug assertions
+            self.route_verdict(name, relevant)
+        except Exception:
             self.print_traceback()
-        finally:
-            if not self.debug:
-                del self._hook_data[name]
 
     def OnPrivTextMessage(self, msg):
-        """1.7+ version of OnPrivMsg
-
-        ``msg`` members (after normalization)::
-
-            type:      'Text'
-            nick:      {...}
-            command:   'PRIVMSG'
-            params:    (<target>, <text>)
-            network:   {...}
-            target:    "..."
-            text:      "..."
-        """
-        self.get_hook_data("OnPrivTextMessage", msg=msg)
+        """1.7+ version of OnPrivMsg"""
+        self.handle_inbound_irc_msg("OnPrivTextMessage", msg)
         return znc.CONTINUE
 
     def OnPrivActionMessage(self, msg):
-        """1.7+ version of OnPrivAction
-
-        Normalized ``msg`` contents are like those of
-        ``OnChanActionMessage``, minus any channel info.
-        """
-        self.get_hook_data("OnPrivActionMessage", msg=msg)
+        """1.7+ version of OnPrivAction"""
+        self.handle_inbound_irc_msg("OnPrivActionMessage", msg)
         return znc.CONTINUE
 
     def OnChanTextMessage(self, msg):
-        """1.7+ version of OnChanMsg
-
-        Normalized ``msg`` contents are like those of
-        ``OnPrivTextMessage``, except with an added ``channel`` item.
-        """
-        self.get_hook_data("OnChanTextMessage", msg=msg)
+        """1.7+ version of OnChanMsg"""
+        self.handle_inbound_irc_msg("OnChanTextMessage", msg)
         return znc.CONTINUE
 
     def OnChanActionMessage(self, msg):
-        """1.7+ version of OnChanAction
-
-         type:    'Action'
-         nick:    {...}
-         channel: {...}
-         command: 'PRIVMSG',
-         params:  (<target>, '\\x01ACTION <text>\\x01')
-         network: {...}
-         target:  "..."
-         text:    "..."
-        """
-        self.get_hook_data("OnChanActionMessage", msg=msg)
+        """1.7+ version of OnChanAction"""
+        self.handle_inbound_irc_msg("OnChanActionMessage", msg)
         return znc.CONTINUE
 
     def parse_command_args(self, command, args):
@@ -626,7 +530,6 @@ class Signal(znc.Module):
         from .ootil import get_tz
         self.tz = get_tz()
         #
-        self._hook_data = {}
         if self.debug:
             msg.extend(["Config auto-loading is disabled in debug mode",
                         "Type 'select' to load manually"])
