@@ -498,14 +498,6 @@ class Signal(znc.Module):
         self.get_hook_data("OnPrivTextMessage", msg=msg)
         return znc.CONTINUE
 
-    def OnPrivMsg(self, Nick, sMessage):
-        """Pre-1.7 version of OnPrivTextMessage
-
-        Unlike the CMessage version, this doesn't include network info.
-        """
-        self.get_hook_data("OnPrivMsg", Nick=Nick, sMessage=sMessage)
-        return znc.CONTINUE
-
     def OnPrivActionMessage(self, msg):
         """1.7+ version of OnPrivAction
 
@@ -515,14 +507,6 @@ class Signal(znc.Module):
         self.get_hook_data("OnPrivActionMessage", msg=msg)
         return znc.CONTINUE
 
-    def OnPrivAction(self, Nick, sMessage):
-        """Pre-1.7 version of OnPrivActionMessage
-
-        Unlike the CMessage version, this doesn't include network info.
-        """
-        self.get_hook_data("OnPrivAction", Nick=Nick, sMessage=sMessage)
-        return znc.CONTINUE
-
     def OnChanTextMessage(self, msg):
         """1.7+ version of OnChanMsg
 
@@ -530,15 +514,6 @@ class Signal(znc.Module):
         ``OnPrivTextMessage``, except with an added ``channel`` item.
         """
         self.get_hook_data("OnChanTextMessage", msg=msg)
-        return znc.CONTINUE
-
-    def OnChanMsg(self, Nick, Channel, sMessage):
-        """Pre-1.7 version of OnChanTextMessage
-
-        Unlike the CMessage version, this doesn't include network info.
-        """
-        self.get_hook_data("OnChanMsg", Nick=Nick, Channel=Channel,
-                           sMessage=sMessage)
         return znc.CONTINUE
 
     def OnChanActionMessage(self, msg):
@@ -554,15 +529,6 @@ class Signal(znc.Module):
          text:    "..."
         """
         self.get_hook_data("OnChanActionMessage", msg=msg)
-        return znc.CONTINUE
-
-    def OnChanAction(self, Nick, Channel, sMessage):
-        """Pre-1.7 version of OnChanActionMessage
-
-        Unlike the CMessage version, this doesn't include network info.
-        """
-        self.get_hook_data("OnChanAction", Nick=Nick, Channel=Channel,
-                           sMessage=sMessage)
         return znc.CONTINUE
 
     def parse_command_args(self, command, args):
