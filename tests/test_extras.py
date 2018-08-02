@@ -11,6 +11,9 @@ class C:
     def OnThree(self):
         print(C.OnThree.__qualname__)
 
+    def OnFour(self):
+        print(C.OnFour.__qualname__)
+
 
 class D(C):
 
@@ -33,7 +36,13 @@ class D(C):
         def wrapped(*args, **kwargs):
             print(f"Wrapped: ", end="")
             f(*args, **kwargs)
-        return wrapped
+        from functools import update_wrapper
+        return update_wrapper(wrapped, f)
+
+
+def on_four(inst):
+    "Func for patching D"
+    print(inst.OnFour.__qualname__)
 
 
 def test_inspect_hooks_simplified(capsys):
@@ -41,12 +50,16 @@ def test_inspect_hooks_simplified(capsys):
     d.OnOne()
     d.OnTwo()
     d.OnThree()
+    # Patched method retains original __qualname__
+    d.__dict__["OnFour"] = on_four.__get__(d)
+    d.OnFour()
     out, __ = capsys.readouterr()
     from textwrap import dedent
     assert out.rstrip() == dedent("""
         Wrapped: D.OnOne
         D._OnTwo
         Wrapped: C.OnThree
+        Wrapped: on_four
     """).strip()
 
 

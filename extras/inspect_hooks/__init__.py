@@ -176,11 +176,10 @@ class InspectHooks(znc.Module):
                 self.logger.debug(f"{name} returned {rv!r} of type {type(rv)}")
             return znc.CONTINUE
         #
-        # NOTE both ``__dict__``s are empty, and the various introspection
-        # attrs aren't used (even by the log formatter). And seems the magic
-        # swig stuff only applies to passed-in objects.
+        # NOTE The attrs assigned by wraps aren't used by the log formatter;
+        # see tests for changes to freestanding funcs bound to instances.
         from functools import update_wrapper
-        return update_wrapper(handle_onner, onner)  # <- useless, for now
+        return update_wrapper(handle_onner, onner)
 
 
 inspect_hooks = InspectHooks
