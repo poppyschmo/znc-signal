@@ -46,6 +46,7 @@ class DBusConnection(znc.Socket):
             #
             self.router.on_unhandled = on_unhandled
         self.authentication = FakeFuture()
+        # FIXME explain why this appears twice (see above)
         self.unique_name = None
 
     def check_subscription(self, service_name=None, member=None):
@@ -285,14 +286,8 @@ class DBusConnection(znc.Socket):
         self.data_received(data)
 
     def OnDisconnected(self):
-        self.put_issuer("Disconnected from %s:%s" % self.bus_addr)
-        try:
-            del self.module._connection
-        except AttributeError:
-            pass
-
-    def OnTimeout(self):
-        self.put_issuer("Connection to %s:%s timed out" % self.bus_addr)
+        self.put_issuer("Disconnected from %s:%s for session %r" %
+                        (*self.bus_addr, self.unique_name))
 
     def OnShutdown(self):
         name = self.GetSockName()

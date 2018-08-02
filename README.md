@@ -247,21 +247,24 @@ stuff. Add simple, reproducible examples.
    4. `/conditions/*/timeout_push`
    5. `/conditions/*/timeout_idle`
 
-3. Integrate signal-cli 0.6.0 features
+3. Deal with unexpected disconnections from the message bus. Find a way to
+   simulate this.
+
+4. Integrate signal-cli 0.6.0 features
    1. Employ receipt subscription and acknowledgment
    2. Queue undelivered messages
    3. Alert attached clients or save to context buffers when backlogs arise
 
-4. Prepare a TCP/Unix-domain-socket shim for the signal-cli container in case
+5. Prepare a TCP/Unix-domain-socket shim for the signal-cli container in case
    some future release of D-Bus drops TCP support entirely.
 
-5. Find some means of testing against real ZNC and signal-cli instances to
+6. Find some means of testing against real ZNC and signal-cli instances to
    stay abreast of recent developments. Perhaps a move to GitLab would make
    this easier. Although ZNC, Signal, and signal-cli are all on GitHub.
 
-6. Prepare for `getGroupIds()` in subsequent signal-cli release.
+7. Prepare for `getGroupIds()` in subsequent signal-cli release.
 
-7. Drop support for ZNC 1.7.0 at some target date or with the next minor
+8. Drop support for ZNC 1.7.0 at some target date or with the next minor
    release.
 
 
