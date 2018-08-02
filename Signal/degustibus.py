@@ -7,10 +7,12 @@ from .jeepers import get_msggen
 
 
 class DBusConnection(znc.Socket):
-    """Create a stream connection to the Signal host's message bus
+    """Connection to the Signal host's message bus
 
     Currently, only TCP is supported.
     """
+    from .commonweal import put_issuer
+
     def Init(self, *args, **kwargs):
         self.module = self.GetModule()
         self.debug = self.module.debug
@@ -266,14 +268,6 @@ class DBusConnection(znc.Socket):
             self.logger.debug(f"Futures awaiting reply: {num_futs}\n{log_msg}")
         self.WriteBytes(data)
         return future
-
-    def put_issuer(self, msg):
-        """Emit messages to invoking client only, if still connected
-
-        Otherwise, target all clients, regardless of network
-        """
-        client = self.module.get_client(self.issuing_client)
-        self.module.put_pretty(msg, putters=(client,) if client else None)
 
     def OnConnected(self):
         from jeepney.auth import make_auth_external

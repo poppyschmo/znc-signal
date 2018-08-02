@@ -11,6 +11,7 @@ class Console(znc.Socket, InteractiveConsole):
 
     See also: <https://github.com/vxgmichel/aioconsole>
     """
+    from .commonweal import put_issuer
 
     def Init(self, *args, **kwargs):
         self.module = self.GetModule()
@@ -178,14 +179,6 @@ class Console(znc.Socket, InteractiveConsole):
             self.write('Exiting %s...\n' % self.__class__.__name__)
         elif exitmsg != '':
             self.write('%s\n' % exitmsg)
-
-    def put_issuer(self, msg):
-        """Emit messages to issuing client only, if still connected
-
-        Otherwise, target all clients, regardless of network
-        """
-        client = self.module.get_client(self.issuing_client)
-        self.module.put_pretty(msg, putters=(client,) if client else None)
 
     def write(self, msg):
         if self.IsClosed():
