@@ -1,16 +1,16 @@
 # ZNC-Signal
 
 A highlight-style forwarder<sup>[1](#user-content-forwarder)</sup> inspired by
-[ZNC Push][] but exclusive to a [single service][]—and with added support for
-two-way messaging
+[ZNC Push][] but exclusive to a [single service][]—with support for two-way
+messaging
 
 
 ### Requirements and dependencies
 - A [dedicated Signal number](#getting-a-number) for this account alone
-- [ZNC][] 1.6.6+ with modpython (preferably running in a Docker container)
+- [ZNC][] 1.7+ with modpython (preferably running in a Docker container)
 - Python 3.6+
 - [signal-cli][] 0.6.0 (Dockerfile included)
-- [jeepney][] (included)
+- [jeepney][] (submodule)
 
 
 ## Installation
@@ -232,14 +232,20 @@ ordering/priority). Also collect and consolidate general questions involving
 fundamental ZNC and/or SWIG behavior. Possibly do the same for IRC/RFC related
 stuff. Add simple, reproducible examples.
 
-1. File upstream bug reports where warranted.
-
-2. Investigate the signal-cli "startup delay" issue. Description: the process
+1. Investigate the signal-cli "startup delay" issue. Description: the process
    lies dormant for up to 30 minutes before connecting to the message bus;
    it's also delayed in recognizing the first message, incoming or outgoing.
    Search upstream for relevant discussions/activity; perhaps create a DSL or
    shell script demonstrating the issue in a reproducible way. Use a debugger
    or system-call inspector to hunt for clues.
+
+2. Either implement or remove the various "placeholder" config options
+   stolen early on from [ZNC Push][]. These are all currently ignored:
+   1. `/templates/*/length`
+   2. `/conditions/*/replied_only`
+   3. `/conditions/*/timeout_post`
+   4. `/conditions/*/timeout_push`
+   5. `/conditions/*/timeout_idle`
 
 3. Integrate signal-cli 0.6.0 features
    1. Employ receipt subscription and acknowledgment
@@ -253,18 +259,10 @@ stuff. Add simple, reproducible examples.
    stay abreast of recent developments. Perhaps a move to GitLab would make
    this easier. Although ZNC, Signal, and signal-cli are all on GitHub.
 
-6. Either implement or remove the various "placeholder" config options
-   stolen early on from [ZNC Push][]. These are all currently ignored:
-   1. `/templates/*/length`
-   2. `/conditions/*/replied_only`
-   3. `/conditions/*/timeout_post`
-   4. `/conditions/*/timeout_push`
-   5. `/conditions/*/timeout_idle`
+6. Prepare for `getGroupIds()` in subsequent signal-cli release.
 
-7. Prepare for `getGroupIds()` in subsequent signal-cli release.
-
-8. Drop support for sub-1.7 ZNC versions at some target date or with the next
-   minor ZNC release.
+7. Drop support for ZNC 1.7.0 at some target date or with the next minor
+   release.
 
 
 ### Lofty spitballing
