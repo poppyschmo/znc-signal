@@ -589,14 +589,14 @@ class Signal(znc.Module):
             if command.startswith("debug_") and not self.debug:
                 msg += "; for debug-related commands, pass DEBUG=1"
             self.put_pretty(msg)
-            return znc.CONTINUE
+            return
         #
         if (command == "debug_args" and
                 args and args[0] not in ("--help", "-h")):
             args = ["--"] + args
         namespace = self.parse_command_args(mod_name, args)
         if namespace is None:
-            return znc.CONTINUE
+            return
         #
         try:
             self.mod_commands[mod_name](**vars(namespace))  # void
@@ -604,7 +604,7 @@ class Signal(znc.Module):
             self.print_traceback()
             # Raising here makes znc print something about the command not
             # being registered
-        return znc.CONTINUE
+        return
 
     def handle_incoming(self, incoming: "incoming_NT"):
         """Interpret and respond to incoming instructions

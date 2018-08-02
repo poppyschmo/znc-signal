@@ -89,7 +89,7 @@ class InspectHooks(znc.Module):
             raise Warning("This module doesn't provide any commands")
         except Warning:
             self.print_traceback("Except for this test of 'print_traceback'")
-        return znc.CONTINUE
+        return
 
     def screen_onner(self, name, args_dict):
         """ Dedupe and filter out unwanted hooks
