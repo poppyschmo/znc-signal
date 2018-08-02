@@ -604,6 +604,9 @@ class Signal(znc.Module):
             self.approx._wrights.connect(**kwargs)
 
     def OnLoad(self, argstr, message):
+        if self.znc_version < (1, 7):
+            message.s = "This module only works with ZNC 1.7+"
+            return False
         if not self.GetUser().IsAdmin():
             message.s = "You must be an admin to use this module"
             return False
