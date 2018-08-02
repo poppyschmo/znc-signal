@@ -145,7 +145,7 @@ class InspectHooks(znc.Module):
     def _wrap_onner(self, onner):
         """A surrogate for CModule 'On' hooks"""
         #
-        def handle_onner(*args, **kwargs):
+        def dump(*args, **kwargs):
             from inspect import signature
             sig = signature(onner)
             bound = sig.bind(*args, **kwargs)
@@ -210,7 +210,7 @@ class InspectHooks(znc.Module):
         # NOTE The attrs assigned by wraps aren't used by the log formatter;
         # see tests for changes to freestanding funcs bound to instances.
         from functools import update_wrapper
-        return update_wrapper(handle_onner, onner)
+        return update_wrapper(dump, onner)
 
 
 inspect_hooks = InspectHooks
