@@ -1433,8 +1433,6 @@ class Signal(znc.Module):
             self.put_pretty(flo.getvalue())
 
     def cmd_debug_cons(self, stop=False, bindhost=None, port=None):
-        # Not sure if it's advisable to call RemSocket here; the telnet module
-        # keeps its own inventory and never registers anything with any manager
         msg = "Already stopped" if stop else None
         for sock_attr in ("_console_client", "_console_listener"):
             oldsock = getattr(self, sock_attr, None)
@@ -1458,23 +1456,14 @@ class Signal(znc.Module):
         if msg:
             self.put_pretty(msg)
             return
-        kwargs = dict(bindhost=bindhost)
-        if port is not None:
-            kwargs["port"] = int(port)
         from .consola import Console, Listener
-        issuer = self.GetClient().GetFullName()
-        sock = self.CreateSocket(Listener)
-        sock.con_class = Console
-        sock.con_kwargs = dict(issuing_client=issuer, **kwargs)
-        #
+        sock = self.CreateSocket(Listener,
+                                 con_class=Console,
+                                 port=port,
+                                 bindhost=bindhost or "",
+                                 issuing_client=self.GetClient().GetFullName())
         self._console_listener = sock
-        port = sock.Listen(**kwargs)
-        if not port:
-            raise ConnectionError
-        sock.SetSockName("Console listener for %s" % self.GetModName())
         self.ListSockets()
-        self.put_pretty("Listening over port {} on host {!r}"
-                        .format(port, bindhost))
         # Ensure help(module.cmd_*) prints something
         for mod_cmd in self.mod_commands:
             base_func = getattr(Signal, mod_cmd)

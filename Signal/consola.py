@@ -28,7 +28,6 @@ class Console(znc.Socket, InteractiveConsole):
                  pd=lambda o: pprint(dir(o)),
                  pf=lambda o, s: pprint([a for a in dir(o) if s in a.lower()]),
                  pm=self.post_mortem,
-                 cznc=znc.CZNC.Get(),
                  console=self,
                  module=self.module)
         )
@@ -170,8 +169,8 @@ class Console(znc.Socket, InteractiveConsole):
                 else:
                     self.write("... " if more else ">>> ")
                     line = yield
-            except EOFError as e:
-                self.write("EOF detected: %r\n" % e)
+            except EOFError:
+                self.write("EOF detected\n")
                 break
             else:
                 more = self.push(line)
@@ -198,32 +197,29 @@ class Console(znc.Socket, InteractiveConsole):
         except StopIteration:
             self.write(msg)
 
-    # TODO use more precise errors for these
     def OnConnected(self):
         self.put_issuer("Python console connected from {!r}"
                         .format(self.GetSockName()))
         self.module._console_client = self
         self.SetSockName("Console client for %s" % self.module.GetModName())
         self.SetTimeout(0)  # Type is ALL
-        if self.debug:
-            self.logger.debug(self.econs(self.GetConState()))
 
     def OnDisconnected(self):
         self.put_issuer("{!r} disconnected".format(self.GetSockName()))
         self.throw_gen(EOFError, "Disconnected")
 
     def OnTimeout(self):
-        self.throw_gen(EOFError, "Timed Out")
+        self.throw_gen(EOFError, "Timed Out")  # never runs when timeout is 0
 
     def OnSockError(self, *args):
+        # TODO try to trigger this, otherwise remove
         self.put_issuer("Got a SockError: %r" % (args))
 
     def OnShutdown(self):
-        name = self.GetSockName()
         if self.debug:
             # Throws ValueError if pipe is already closed, which occasionally
             # happens when mod is unloaded while still connected
-            self.logger.debug("%r shutting down" % name)
+            self.logger.debug("%r shutting down" % self.GetSockName())
 
 
 class Listener(znc.Socket):
@@ -231,40 +227,21 @@ class Listener(znc.Socket):
 
     .. _wiki: https://wiki.znc.in/Modpython#Sockets
     """
-    con_class = None
-    con_args = ()
-    con_kwargs = {}
+    from .commonweal import put_issuer
+
+    def Init(self, *args, **kwargs):
+        self.module = self.GetModule()
+        self.__dict__.update(kwargs)
+        port = self.Listen(port=self.port, bindhost=self.bindhost or "")
+        if port == 0:
+            raise RuntimeError("Failed to set up listener")
+        self.put_issuer("Listening over port {} on {}"
+                        .format(port, self.bindhost or self.GetBindHost()))
+        self.SetSockName("Console listener for Signal")
 
     def OnAccepted(self, host, port):
-        self.con_kwargs.setdefault("host", host)
-        self.con_kwargs.setdefault("port", port)
-        from enum import Enum
-        # 0 is not unique, so the ``.name`` attr and repr are only valid for
-        # the first key initialized to 0.
-        econs = Enum("Csock::ECONState",
-                     ((k, v) for k, v in vars(znc.Csock).items() if
-                      k.startswith("CST_")))
-        self.con_kwargs.setdefault("econs", econs)
-        return self.GetModule().CreateSocket(self.con_class, *self.con_args,
-                                             **self.con_kwargs)
+        return self.module.CreateSocket(self.con_class,
+                                        issuing_client=self.issuing_client)
 
     def OnShutdown(self):
-        if self.IsClosed():
-            mod = self.GetModule()
-            client = mod.get_client(self.con_kwargs["issuing_client"])
-            name = "%s.%s" % (self.__module__, self.__class__.__name__)
-            mod.put_pretty("%r is shutting down" % name,
-                           putters=(client,) if client else None)
-        # GetModule() always works when sock is closed, but sometimes fails
-        # when still open (seemingly after attempt is made to open a new
-        # listener immediately after closing one with identical settings)
-        # TODO see if setting SO_REUSEADDR makes sense
-        else:
-            try:
-                # Emit to all clients, regardless of network
-                self.GetModule().put_pretty("\x02Error\x02: console listener "
-                                            "is not closed")
-            except AttributeError as exc:
-                if not all(s in repr(exc.args) for s in ("NoneType",
-                                                         "GetNewPyObj")):
-                    raise
+        self.put_issuer("Shutting down %r" % self.GetSockName())

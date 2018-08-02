@@ -502,6 +502,7 @@ def cmd_debug_cons():
     )
     console_main.add_argument(
         "--port", metavar="<port>",
+        type=int,
         help="default: random unprivileged"
     )
     return p
