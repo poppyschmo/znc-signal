@@ -819,9 +819,6 @@ class Signal(znc.Module):
                 self.put_pretty(body, where="PutClient", fmt=fmt,
                                 putters=session["network"].GetClients())
                 return
-            # TODO check if this is doable in 1.6
-            if self.znc_version < (1, 7):
-                return
             #
             # Could join chan here, but better reserved for explicit command
             if target.startswith("#"):
@@ -1615,10 +1612,7 @@ class Signal(znc.Module):
                 rest = (parser.format_usage()
                         .replace(upre, "", 1)
                         .replace("[-h] ", "", 1))
-                if self.znc_version < (1, 7, 0):
-                    desc = [" ".join(rest.split())]
-                else:
-                    desc = [l.strip() for l in rest.split("\n") if l.strip()]
+                desc = [l.strip() for l in rest.split("\n") if l.strip()]
             else:
                 desc = [parser.description]
             for line, comm in zip_longest(desc, (command,), fillvalue=""):
