@@ -16,7 +16,7 @@ signal_stub_debug = signal_stub_debug
 # the process.
 
 znc_url = "https://znc.in/releases/archive/znc-{rel}.tar.gz"
-pinned_releases = ("1.6.6", "1.7.0-rc1", "1.7.0")
+pinned_releases = ("1.6.6", "1.7.0-rc1", "1.7.0", "1.7.1")
 
 
 class CullNonHooks(ast.NodeTransformer):
