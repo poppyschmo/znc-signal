@@ -231,8 +231,6 @@ class Console(znc.Socket, InteractiveConsole):
             # Throws ValueError if pipe is already closed, which occasionally
             # happens when mod is unloaded while still connected
             self.logger.debug("%r shutting down" % name)
-        for handler in self.logger.handlers:
-            self.logger.removeHandler(handler)
 
 
 class Listener(znc.Socket):

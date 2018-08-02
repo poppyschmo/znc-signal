@@ -303,9 +303,3 @@ class DBusConnection(znc.Socket):
                 # Only occurs when disconnect teardown is interrupted
                 if "operation on closed file" not in repr(exc):
                     raise
-        for handler in self.logger.handlers:
-            self.logger.removeHandler(handler)
-        self.module.ListSockets()
-
-    def ConnectUnix(self, path):
-        raise RuntimeError("Unix domain sockets are not yet supported")
