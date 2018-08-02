@@ -1,8 +1,8 @@
 import ast
 import os
 import pytest
-from extras.inspect_hooks import InspectHooks, znc
-
+from extras.inspect_hooks import znc, InspectHooks
+from extras.inspect_hooks.helpers import get_deprecated_hooks
 
 znc_url = "https://znc.in/releases/archive/znc-{rel}.tar.gz"
 pinned_releases = ("1.6.6", "1.7.0-rc1", "1.7.0", "1.7.1")
@@ -135,7 +135,6 @@ def test_normalize_hook_args(base_dir, cpymodule_hook_args):
         # Note: this no longer *directly* affects the main Signal class because
         # it no longer imports "deprecated_hooks". However, the inspector
         # helper still relies on it, and that's used to keep things current.
-        from Signal.commonweal import get_deprecated_hooks
         deprecated_hooks = get_deprecated_hooks(hook_args.keys())
         assert deprecated_hooks == outliers | deprecados
         #

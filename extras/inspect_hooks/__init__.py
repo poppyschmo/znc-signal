@@ -13,12 +13,12 @@ except ImportError:
 try:
     ootil
 except NameError:
-    _normalize_onner = None
+    normalize_onner = None
 else:
     get_logger = ootil.GetLogger()
     znc_version = commonweal.znc_version
-    deprecated_hooks = commonweal.deprecated_hooks
-    _normalize_onner = commonweal.normalize_onner
+    from .helpers import (deprecated_hooks, normalize_onner,
+                          get_first, get_cmess_types)
 
 
 class InspectHooks(znc.Module):
@@ -28,7 +28,7 @@ class InspectHooks(znc.Module):
     logfile = None
     log_raw = False
     log_old_hooks = False
-    normalize_onner = _normalize_onner
+    normalize_onner = normalize_onner
 
     def __getattribute__(self, name):
         """Intercept calls to On* methods for learning purposes
@@ -52,7 +52,7 @@ class InspectHooks(znc.Module):
 
     def _OnLoad(self, argstr, message):
         #
-        if self.normalize_onner is None:
+        if normalize_onner is None:
             message.s = ("Copy or link commonweal.py and ootil.py from Signal "
                          "into this package's dir. Or just load Signal.")
             return False
@@ -71,12 +71,12 @@ class InspectHooks(znc.Module):
         self.logger.debug("loaded, logging with: %r" % self.logger)
         #
         self._hook_data = {}
-        self.cmess_types = commonweal.get_cmess_types()
+        self.cmess_types = get_cmess_types()
         #
         return True
 
     def _OnShutdown(self):
-        if not _normalize_onner:
+        if not normalize_onner:
             return
         try:
             self.logger.debug("%r shutting down" % self.GetModName())
@@ -127,10 +127,10 @@ class InspectHooks(znc.Module):
         return True
 
     def post_normalize(self, name, args_dict):
-        """Additional info not included by commonweal.normalize_onner"""
+        """Additional info not included by normalize_onner"""
         # Trailing "/<network>" portion missing when called during
         # OnClientDisconnect but present during OnClientLogin
-        if not commonweal.get_first(args_dict, "client", "Client"):
+        if not get_first(args_dict, "client", "Client"):
             try:
                 client_name = self.GetClient().GetFullName()
             except AttributeError:
