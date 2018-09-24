@@ -1269,9 +1269,7 @@ class Signal(znc.Module):
 
     def cmd_connect(self, address=None, host=None, port=None, bindhost=None):
         # TODO remove bindhost option; we're not listening for requests
-        from jeepney import bus
-        # Enable TCP transport and ANONYMOUS authentication
-        bus.SUPPORTED_TRANSPORTS = ("unix", "tcp")
+        from .degustibus import get_tcp_address, DBusConnection
         #
         if address is None:
             if host is None:  # Port defaults to 47000
@@ -1280,7 +1278,7 @@ class Signal(znc.Module):
                 raise self.approx._construct_error("connect", "host", msg)
             address = "tcp:host={host},port={port}".format(host=host,
                                                            port=port)
-        bus_addr = bus.get_bus(address)
+        bus_addr = get_tcp_address(address)
         if self.debug:
             self.logger.debug("Bus address: {}".format(bus_addr))
         if not isinstance(bus_addr, tuple):
@@ -1291,7 +1289,6 @@ class Signal(znc.Module):
                 self._connection.bus_addr == bus_addr):
             self.put_pretty("Already connected to %r" % bus_addr)
             return
-        from .degustibus import DBusConnection
         issuer = self.GetClient().GetFullName()
         self._connection = self.CreateSocket(DBusConnection, bus_addr=bus_addr,
                                              issuing_client=issuer)

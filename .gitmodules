@@ -1,4 +1,4 @@
 [submodule "Signal/lib/jeepney"]
 	path = Signal/lib/jeepney
-	url = https://gitlab.com/poppyschmo/jeepney.git
-	branch = tcp_anon
+	url = https://gitlab.com/takluyver/jeepney.git
+	branch = master

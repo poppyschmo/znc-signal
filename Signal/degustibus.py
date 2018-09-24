@@ -3,7 +3,17 @@
 
 from . import znc
 from . import get_logger
-from .jeepers import get_msggen
+from .jeepers import incoming_NT, get_msggen
+
+from asyncio.events import AbstractEventLoop
+from asyncio.futures import Future as AsyncFuture
+
+from jeepney.auth import (SASLParser, BEGIN,
+                          make_auth_anonymous, make_auth_external)
+from jeepney.bus import parse_addresses
+from jeepney.low_level import Parser
+from jeepney.routing import Router
+from jeepney.integrate.asyncio import Proxy
 
 
 class DBusConnection(znc.Socket):
@@ -23,20 +33,15 @@ class DBusConnection(znc.Socket):
         self.__dict__.update(kwargs)
         self.unique_name = None
         #
-        from jeepney.auth import SASLParser, make_auth_anonymous
-        make_auth_anonymous.ALLOW = True
-        self.auth_parser = SASLParser()
-        #
-        from jeepney.low_level import Parser, HeaderFields
+        self.auth_parser = SASLParserAnonAuth()
         self.parser = Parser()
         #
-        from .jeepers import FakeFuture, FakeLoop
         FakeFuture.fake_loop = FakeLoop(self.module)
-        #
-        from jeepney.routing import Router
         self.router = Router(FakeFuture)
         #
         if self.debug:
+            from jeepney.low_level import HeaderFields
+
             def on_unhandled(msg):
                 member = msg.header.fields[HeaderFields.member]
                 if member == "NameAcquired":
@@ -45,7 +50,7 @@ class DBusConnection(znc.Socket):
                 else:
                     log_msg = "See 'data_received' entry above for contents"
                 self.logger.debug(log_msg)
-            #
+
             self.router.on_unhandled = on_unhandled
         self.authentication = FakeFuture()
         # FIXME explain why this appears twice (see above)
@@ -106,7 +111,6 @@ class DBusConnection(znc.Socket):
         def watch_message_received_cb(msg_body):  # noqa: E306
             if self.debug:
                 assert isinstance(msg_body, tuple)
-            from .jeepers import incoming_NT
             try:
                 self.module.handle_incoming(incoming_NT(*msg_body))
             except Exception:
@@ -178,9 +182,6 @@ class DBusConnection(znc.Socket):
                             args=(service_name,))
 
     def _open_session(self):
-        from jeepney.integrate.asyncio import Proxy
-        from .jeepers import get_msggen
-        #
         bus = Proxy(get_msggen("DBus"), self)
         hello_reply = bus.Hello()
 
@@ -198,7 +199,6 @@ class DBusConnection(znc.Socket):
         hello_reply.add_done_callback(hello_cb)
 
     def _authenticated(self):
-        from jeepney.auth import BEGIN
         self.WriteBytes(BEGIN)
         self.authentication.set_result(True)
         self.data_received = self.data_received_post_auth
@@ -217,7 +217,6 @@ class DBusConnection(znc.Socket):
             )
         elif self.auth_parser.rejected is not None:
             if b"ANONYMOUS" in self.auth_parser.rejected:
-                from jeepney.auth import make_auth_anonymous
                 self.WriteBytes(make_auth_anonymous())
                 self.auth_parser.rejected = None
             else:
@@ -270,7 +269,6 @@ class DBusConnection(znc.Socket):
         return future
 
     def OnConnected(self):
-        from jeepney.auth import make_auth_external
         self.WriteBytes(b'\0' + make_auth_external())
         self.put_issuer("Connected to: %s:%s" % self.bus_addr)
         self.SetSockName("DBus proxy to signal server")
@@ -292,3 +290,60 @@ class DBusConnection(znc.Socket):
                 # Only occurs when disconnect teardown is interrupted
                 if "operation on closed file" not in repr(exc):
                     raise
+
+
+class SASLParserAnonAuth(SASLParser):
+    def __init__(self):
+        super().__init__()
+        self.rejected = None
+
+    def process_line(self, line):
+        self.rejected = None
+        if line.startswith(b"REJECTED"):
+            self.rejected = line
+        else:
+            super().process_line(line)
+
+    def feed(self, data):
+        self.buffer += data
+        while ((b'\r\n' in self.buffer)
+               and not self.authenticated
+               and self.rejected is None):
+            line, self.buffer = self.buffer.split(b'\r\n', 1)
+            self.process_line(line)
+
+
+class FakeLoop(AbstractEventLoop):
+    """Kludge for DBusConnection's incoming data dispatcher (router)
+
+    Obviously, this is pure mockery and not a real shim.
+    """
+    def __init__(self, module):
+        self.module = module
+
+    def call_later(self, delay, callback, *args):
+        """This is actually ``call_soon``"""
+        assert delay == 0
+        callback(*args)
+
+    def get_debug(self):
+        return False
+
+
+class FakeFuture(AsyncFuture):
+    fake_loop = None
+
+    def __init__(self):
+        assert self.fake_loop is not None
+        super().__init__(loop=self.fake_loop)
+
+
+def get_tcp_address(addr):
+    """Return a single host/port tuple"""
+    transport, kv = next(parse_addresses(addr))
+    # Unix domain sockets are not yet supported by ZNC
+    # FIXME add issue/PR id above
+    assert transport == "tcp"
+    assert kv.get("bind") is None
+    assert kv.get("family", "ipv4") == "ipv4"
+    return kv["host"], int(kv["port"])

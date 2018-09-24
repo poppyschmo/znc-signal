@@ -5,8 +5,6 @@
 Miscellaneous objects for the DBus connection
 """
 
-from asyncio.events import AbstractEventLoop
-from asyncio.futures import Future as AsyncFuture
 from jeepney.wrappers import MessageGenerator, new_method_call  # noqa E402
 from typing import List, TypeVar
 from collections import namedtuple
@@ -61,30 +59,6 @@ class SignalMG(MessageGenerator):
 
     def getGroupMembers(self, groupId: List[bytes]):
         return new_method_call(self, 'getGroupMembers', 'ay', (groupId,))
-
-
-class FakeLoop(AbstractEventLoop):
-    """Kludge for DBusConnection's incoming data dispatcher (router)
-
-    Obviously, this is pure mockery and not a real shim.
-    """
-    def __init__(self, module):
-        self.module = module
-
-    def call_later(self, delay, callback, *args):
-        """This is actually ``call_soon``"""
-        assert delay == 0
-        callback(*args)
-
-    def get_debug(self):
-        return False
-
-
-class FakeFuture(AsyncFuture):
-    fake_loop = None
-
-    def __init__(self):
-        super().__init__(loop=self.fake_loop)
 
 
 signal_service = SignalMG()
