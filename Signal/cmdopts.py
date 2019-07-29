@@ -592,7 +592,7 @@ def cmd_debug_send():
         type=strip_suspect,
         help="""
             must follow a "{S}" separator. Format should be comma-separated
-            JSON; no need to shell\ quote or [ book-end ]; must adhere to
+            JSON; no need to shell\\ quote or [ book-end ]; must adhere to
             call signature exactly; example: {S} "foo", {{"bar": 42}}, "baz"
         """.format(S=RAWSEP)
     )

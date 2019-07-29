@@ -260,7 +260,7 @@ class BaseConfigDict(UserDict):
 
         peel
             Replace ChainMaps with their topmost layer stripped of
-            non-unique items ({user items} \ {backing items}).
+            non-unique items (user items minus backing items).
 
         mapping
             If absent, a sorted copy of self.data is returned.
