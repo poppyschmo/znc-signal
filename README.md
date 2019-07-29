@@ -7,35 +7,28 @@ messaging
 
 ### Requirements and dependencies
 - A [dedicated Signal number](#getting-a-number) for this account alone
-- [ZNC][] 1.7+ with modpython (preferably running in a Docker container)
-- Python 3.6+
+- [ZNC][] 1.7.4
 - [signal-cli][] 0.6.0 (Dockerfile included)
-- [jeepney][] (submodule)
+- [jeepney][] (submodule included)
 
 
 ## Installation
 
-The recommended setup is to run both ZNC and signal-cli in Docker containers.
-These should be capable of addressing one another by
-hostname.<sup>[2](#user-content-hostname)</sup> The [official ZNC Docker
-image][dockerhubznc] (full) is recommended, but please use the provided
-[`/docker/Dockerfile`](docker/Dockerfile) for signal-cli (or use it as
-a baseline).<sup>[3](#user-content-image)</sup> If not using the recommended
-setup, a bit of finagling may be
-required.<sup>[4](#user-content-other_setups)</sup>
+The only supported<sup>[4](#user-content-other_setups)</sup> setup is to run
+both ZNC and signal-cli in networked<sup>[2](#user-content-hostname)</sup>
+containers. Your best bets are
+- the [official ZNC Docker image][dockerhubznc]
+- a signal-cli built from (or based on)<sup>[3](#user-content-image)</sup>
+  the provided [`/docker/Dockerfile`](docker/Dockerfile)
 
 Users with existing signal-cli accounts should bind a *copy* of their
 config-data directory to the one assigned to the container's `signal-cli`
-user.<sup>[5](#user-content-vols)</sup> New users should instead provide an
-empty host-side directory. The container-side counterpart,
-`/var/lib/signal-cli/.config/signal/`, as well as other defaults, can be
-customized with various build- and runtime arguments (see
-[`/docker/*`](docker) for more info).
+user.<sup>[5](#user-content-vols)</sup> New users should instead bind an
+empty directory or volume.
 
 After securing a dedicated number, new users should proceed with the usual
 signal-cli [setup steps][sigcliusage] (typically just
-registration/verification) via
-`docker-exec`.<sup>[6](#user-content-chicken_egg)</sup>
+registration/verification).<sup>[6](#user-content-chicken_egg)</sup>
 
 ### The ZNC module
 1. Clone the repo somewhere convenient
@@ -46,6 +39,10 @@ registration/verification) via
 2. Copy the [`/Signal`](Signal) directory to the host-side Docker volume under
    the `/modules` subdirectory
 3. Load the module (remembering the capital "S")
+
+Kubernetes users should do the first two steps in an init container,
+perhaps binding config maps where necessary. Or, prepare a dedicated volume
+ahead of time and persist the whole `/znc-data` tree.
 
 
 ### Getting a number
@@ -96,6 +93,10 @@ The following aren't so much disclaimers as admissions of shortcomings.
    A human-pronounceable hostname should be explicitly assigned, for example,
    using `docker-run`'s `--hostname` option.
 
+   For Kubernetes, disregard the above and just place the two containers in
+   the same pod. Exposing (this instance of) signal-cli as a service is not
+   recommended.
+
    Note that the D-Bus TCP transport has recently been deprecated on Unix
    (see revision 0.33 of the [spec][dbus_spec]).
 
@@ -126,8 +127,8 @@ The following aren't so much disclaimers as admissions of shortcomings.
    ```
    If also running signal-cli on the host machine, the transport *must still*
    be TCP, so make certain the interface is local-only. More complicated
-   setups involving Internet-spanning connections probably aren't worth the
-   trouble, unless you're a networking expert.
+   setups involving (non-k8s) Internet-spanning connections probably aren't
+   worth the trouble, unless you're a networking expert.
 
 
 5. <a name="vols"></a> In its simplest form, `docker-run`'s
@@ -145,9 +146,10 @@ The following aren't so much disclaimers as admissions of shortcomings.
                ├── ...                   ├── ...
                └── +99999999999.d/       └── +99999999999.d/
    ```
-   There's nothing special about this container's volume requirements, but
-   the usual considerations still apply. For example, when using symlinks, the
-   target must be accessible within the container, etc. If `docker-ps` doesn't
+   The container-side of this mapping can be changed at build time. There's
+   nothing special about this container's volume requirements, but the usual
+   considerations still apply. For example, when using symlinks, the target
+   must be accessible within the container, etc. If `docker-ps` doesn't
    display the current value (because the container is stopped), try
    `docker-container-inspect` instead. These `--format` args may help:
    ```go
@@ -155,12 +157,14 @@ The following aren't so much disclaimers as admissions of shortcomings.
    // or
    "{{ $m := index .Mounts 0 }}{{ $m.Source }}:{{ $m.Destination }}"
    ```
+   Kubernetes users can bind a statically provisioned persistent volume and
+   use snapshots to populate and save its contents.
 
 6. <a name="chicken_egg"></a> The whole *Catch-22* of having to initialize the
    container with an existing account can be sidestepped by providing `--env
    SIGNAL_CLI_USERNAME=<new number>` on the first go-round, even though
-   the number's still unregistered. That way, you can use `docker-exec` as
-   follows, and forgo having to remake the container:
+   the number's still unregistered. That way, you can use `docker-exec` (or
+   `kubectl-exec`) as follows, and forgo having to remake the container:
    ```console
    ># docker exec -it my_container interact
 
@@ -267,40 +271,6 @@ stuff. Add simple, reproducible examples.
 8. Drop support for ZNC 1.7.0 at some target date or with the next minor
    release.
 
-
-### Lofty spitballing
-1. Add bootstrapped deployment examples in the form of DSL files for various
-   orchestration ecosystems.
-2. Impersonate a mini client in a sub/executor process and work out a simple
-   means of message-passing. Would have to connect without triggering any "On"
-   hooks so ZNC and other modules don't dump their buffers. The point of this
-   would be to allow (optional) full control over ZNC.
-
-3. Support "proxied" conversations between two or more instances of this
-   module. Would require convincing some computer expert to explain how this
-   should work (or write the actual code). For certain, all participants must
-   reveal their `signal-cli` account numbers to each other, perhaps through
-   some flavor of PKI. This could be automated via a PRIVMSG "signature
-   string" or IRCv3 message tags. Likewise for account numbers, which could be
-   replaced periodically via Twilio's API.
-
-   The purpose of this would be to offer (a) an intermediate form of trust
-   because neither party wants to share their mobile number or (b) an
-   out-of-band SDCC-like option that avoids direct ZNC-to-ZNC or
-   client-to-client TLS connections.
-   ```
-   ZNC module ←→ Official Signal servers ←→ ZNC module
-      ↑↓                                       ↑↓
-     Bob       /* IRC or Signal client */     Alice
-   ```
-4. Convince upstream to add attachments support over D-Bus. This could open the
-   door to a host of handy features for mobile users, among them the option
-   for receiving buffer dumps as browser-ingestible content, which could
-   progressively load as updates arrive (without requiring a browser plugin or
-   a local web server).
-
-5. Explore adding the node-js-based headless Signal client as a fallback for
-   signal-cli.
 
 [ZNC Push]: https://github.com/jreese/znc-push
 [single service]: https://signal.org
