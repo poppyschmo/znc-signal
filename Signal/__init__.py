@@ -16,30 +16,18 @@ you might have mess with file permissions::
 
 """
 
-import os
 import sys
 import znc  # noqa: F401
+
+from pathlib import Path
 
 if sys.version_info < (3, 6):
     raise RuntimeError("This module requires Python 3.6+")
 
-jeepney_lib_path = os.path.join(os.path.dirname(__file__), "lib/jeepney")
-if os.path.isdir(jeepney_lib_path) and sys.path[0] != jeepney_lib_path:
-    while jeepney_lib_path in sys.path[:]:
-        sys.path.remove(jeepney_lib_path)
-    sys.path.insert(0, jeepney_lib_path)
+jeepney_lib_path = (Path(__file__).parent / "lib/jeepney").resolve(True)
+sys.path = [str(jeepney_lib_path)] + [p for p in sys.path if
+                                      Path(p).resolve() != jeepney_lib_path]
 
-try:
-    from jeepney.auth import make_auth_anonymous  # noqa: F401
-except ImportError as exc:
-    if "make_auth_anonymous" in repr(exc.args):
-        errmsg = ("This module requires a patched version of jeepney; "
-                  "see .gitmodules for the URL")
-        raise ImportError(errmsg) from exc
-    else:
-        raise
-else:
-    del make_auth_anonymous
 
 from .ootil import GetLogger  # noqa E402
 get_logger = GetLogger()
