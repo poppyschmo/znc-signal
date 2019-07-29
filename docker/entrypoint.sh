@@ -13,7 +13,7 @@ if [ $# -eq 0 ] && [ "${0##*/}" = interact ]; then
 fi
 
 if [ $# -eq 0 ]; then
-    : "${SIGNAL_CLI_CONFIG:=$SIGNAL_CLI_HOME/.config/signal}"
+    : "${SIGNAL_CLI_CONFIG:=$SIGNAL_CLI_HOME/.local/share/signal-cli}"
     if [ "$SIGNAL_CLI_USERNAME" ] && [ -e "$SIGNAL_CLI_CONFIG" ]; then
         chown -R signal-cli: "$SIGNAL_CLI_HOME" "$SIGNAL_CLI_CONFIG"
         export SIGNAL_CLI_HOME \

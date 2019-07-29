@@ -2,7 +2,7 @@
 # License: Apache 2.0 <http://www.apache.org/licenses/LICENSE-2.0>
 
 FROM openjdk:8-jdk-alpine
-ENV SIGNAL_CLI_VERSION ${SIGNAL_CLI_VERSION:-0.6.0}
+ENV SIGNAL_CLI_VERSION ${SIGNAL_CLI_VERSION:-0.6.2}
 ENV LIBMATTHEW_VERSION ${LIBMATTHEW_VERSION:-0.8.1}
 
 ARG signal_cli_home

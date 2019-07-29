@@ -8,23 +8,22 @@ messaging
 ### Requirements and dependencies
 - A [dedicated Signal number](#getting-a-number) for this account alone
 - [ZNC][] 1.7.4
-- [signal-cli][] 0.6.0 (Dockerfile included)
+- [signal-cli][] 0.6.2 (Dockerfile included)
 - [jeepney][] (submodule included)
 
 
 ## Installation
 
-The only supported<sup>[4](#user-content-other_setups)</sup> setup is to run
+The recommended setup<sup>[4](#user-content-other_setups)</sup> is to run
 both ZNC and signal-cli in networked<sup>[2](#user-content-hostname)</sup>
 containers. Your best bets are
 - the [official ZNC Docker image][dockerhubznc]
 - a signal-cli built from (or based on)<sup>[3](#user-content-image)</sup>
   the provided [`/docker/Dockerfile`](docker/Dockerfile)
 
-Users with existing signal-cli accounts should bind a *copy* of their
-config-data directory to the one assigned to the container's `signal-cli`
-user.<sup>[5](#user-content-vols)</sup> New users should instead bind an
-empty directory or volume.
+Existing signal-cli users should bind a *copy* of their config-data directory
+to the appropriate path inside the container.<sup>[5](#user-content-vols)</sup>
+New users should instead bind an empty directory or volume.
 
 After securing a dedicated number, new users should proceed with the usual
 signal-cli [setup steps][sigcliusage] (typically just
@@ -36,13 +35,13 @@ registration/verification).<sup>[6](#user-content-chicken_egg)</sup>
    >$ git clone --recurse-submodules \
        https://github.com/poppyschmo/znc-signal.git
    ```
-2. Copy the [`/Signal`](Signal) directory to the host-side Docker volume under
-   the `/modules` subdirectory
-3. Load the module (remembering the capital "S")
+2. Copy the [`/Signal`](Signal) directory to the `/modules` subdirectory of
+   the volume to be mounted inside the container
+3. Load the ZNC module (remembering the capital "S")
 
-Kubernetes users should do the first two steps in an init container,
-perhaps binding config maps where necessary. Or, prepare a dedicated volume
-ahead of time and persist the whole `/znc-data` tree.
+Kubernetes users can do the first two steps in an init container, binding
+config maps where necessary. Or, just prepare a dedicated volume ahead of time
+and persist the whole `/znc-data` tree.
 
 
 ### Getting a number
@@ -97,7 +96,7 @@ The following aren't so much disclaimers as admissions of shortcomings.
    the same pod. Exposing (this instance of) signal-cli as a service is not
    recommended.
 
-   Note that the D-Bus TCP transport has recently been deprecated on Unix
+   Note that the D-Bus TCP transport was deprecated on Unix in 2018
    (see revision 0.33 of the [spec][dbus_spec]).
 
 
@@ -115,7 +114,7 @@ The following aren't so much disclaimers as admissions of shortcomings.
    ```console
    ># docker run --detach --env "SIGNAL_CLI_USERNAME=+18662904236" \
        --name signal --hostname signal \
-       -v /tmp/config_data:/var/lib/signal-cli/.config/signal \
+       -v /tmp/config_data:/var/lib/signal-cli/.local/share/signal-cli \
        custom/signal-cli:test
 
    >$ DBUS_SESSION_BUS_ADDRESS=tcp:host=172.17.0.2,port=47000 \
@@ -126,25 +125,22 @@ The following aren't so much disclaimers as admissions of shortcomings.
 
    ```
    If also running signal-cli on the host machine, the transport *must still*
-   be TCP, so make certain the interface is local-only. More complicated
-   setups involving (non-k8s) Internet-spanning connections probably aren't
-   worth the trouble, unless you're a networking expert.
+   be TCP, so make certain the interface is local-only.
 
 
-5. <a name="vols"></a> In its simplest form, `docker-run`'s
-   [`--volume` option][dockerrundocs] takes an argument of
-   `HOST-DIR:CONTAINER-DIR`. Docker Compose and the various Docker-related
-   configuration-management tools all use the same option name and value
-   syntax.
+5. <a name="vols"></a> This example shows `docker-run`'s
+   [`--volume` option][dockerrundocs], which takes an argument of
+   `HOST-DIR:CONTAINER-DIR`. But the same idea applies to other
+   container-creation tools as well as Kubernetes pod definitions.
    ```console
    ># docker run ... \
-       --volume HOST-DIR:CONTAINER-DIR ...
-                ↓                    ↓
-           /some/path/               /var/lib/signal-cli/.config/signal/
-           └── data/                 └── data/
-               ├── +11111111111          ├── +11111111111
-               ├── ...                   ├── ...
-               └── +99999999999.d/       └── +99999999999.d/
+        --volume HOST-DIR:CONTAINER-DIR ...
+                 ↓                ↓
+       /some/path/                /var/lib/signal-cli/.local/share/signal-cli/
+       └── data/                  └── data/
+           ├── +11111111111           ├── +11111111111
+           ├── ...                    ├── ...
+           └── +99999999999.d/        └── +99999999999.d/
    ```
    The container-side of this mapping can be changed at build time. There's
    nothing special about this container's volume requirements, but the usual
@@ -157,9 +153,6 @@ The following aren't so much disclaimers as admissions of shortcomings.
    // or
    "{{ $m := index .Mounts 0 }}{{ $m.Source }}:{{ $m.Destination }}"
    ```
-   Kubernetes users can bind a statically provisioned persistent volume and
-   use snapshots to populate and save its contents.
-
 6. <a name="chicken_egg"></a> The whole *Catch-22* of having to initialize the
    container with an existing account can be sidestepped by providing `--env
    SIGNAL_CLI_USERNAME=<new number>` on the first go-round, even though
@@ -208,7 +201,7 @@ The following aren't so much disclaimers as admissions of shortcomings.
       ```console
       [my_container:~]$ signal-cli -u $USERNAME verify $CODE
 
-      [my_container:~]$ test -n "$(ls .config/signal/data)" && echo success
+      [my_container:~]$ test -n "$(ls .local/share/signal-cli/data)" && echo success
       success
       ```
    4. Notes:
@@ -236,6 +229,8 @@ ordering/priority). Also collect and consolidate general questions involving
 fundamental ZNC and/or SWIG behavior. Possibly do the same for IRC/RFC related
 stuff. Add simple, reproducible examples.
 
+1. Add end-to-end tests, with CI, if possible.
+
 1. Investigate the signal-cli "startup delay" issue. Description: the process
    lies dormant for up to 30 minutes before connecting to the message bus;
    it's also delayed in recognizing the first message, incoming or outgoing.
@@ -243,32 +238,31 @@ stuff. Add simple, reproducible examples.
    shell script demonstrating the issue in a reproducible way. Use a debugger
    or system-call inspector to hunt for clues.
 
-2. Either implement or remove the various "placeholder" config options
+1. Either implement or remove the various "placeholder" config options
    stolen early on from [ZNC Push][]. These are all currently ignored:
    1. `/templates/*/length`
-   2. `/conditions/*/replied_only`
-   3. `/conditions/*/timeout_post`
-   4. `/conditions/*/timeout_push`
-   5. `/conditions/*/timeout_idle`
+   1. `/conditions/*/replied_only`
+   1. `/conditions/*/timeout_post`
+   1. `/conditions/*/timeout_push`
+   1. `/conditions/*/timeout_idle`
 
-3. Deal with unexpected disconnections from the message bus. Find a way to
+1. Deal with unexpected disconnections from the message bus. Find a way to
    simulate this.
 
-4. Integrate signal-cli 0.6.0 features
-   1. Employ receipt subscription and acknowledgment
-   2. Queue undelivered messages
-   3. Alert attached clients or save to context buffers when backlogs arise
+1. Integrate signal-cli 0.6.0 features
+   1. Subscribe to and acknowledge receipts
+   1. Queue undelivered messages
+   1. Alert attached clients or save to context buffers when backlogs arise
+   1. Add support for `getGroupIds()`
 
-5. Prepare a TCP/Unix-domain-socket shim for the signal-cli container in case
+1. Prepare a TCP/Unix-domain-socket shim for the signal-cli container in case
    some future release of D-Bus drops TCP support entirely.
 
-6. Find some means of testing against real ZNC and signal-cli instances to
+1. Find some means of testing against real ZNC and signal-cli instances to
    stay abreast of recent developments. Perhaps a move to GitLab would make
    this easier. Although ZNC, Signal, and signal-cli are all on GitHub.
 
-7. Prepare for `getGroupIds()` in subsequent signal-cli release.
-
-8. Drop support for ZNC 1.7.0 at some target date or with the next minor
+1. Drop support for ZNC 1.7.0 at some target date or with the next minor
    release.
 
 
