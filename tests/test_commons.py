@@ -27,19 +27,6 @@ def test_ordered_pprint():
     assert opp.pformat(d_sorted) == pp.pformat(d_sorted)
 
 
-def test_tstr2dt(capsys):
-    from Signal.ootil import timestr2dt
-    from doctest import run_docstring_examples
-    run_docstring_examples(timestr2dt, locals())
-    assert capsys.readouterr() == ("", "")
-
-
-def test_backwrap(capsys):
-    from Signal.ootil import backwrap
-    from doctest import run_docstring_examples
-    run_docstring_examples(backwrap, locals())
-    assert capsys.readouterr() == ("", "")
-
 
 def test_unescape_unicode_char():
     from Signal.ootil import unescape_unicode_char

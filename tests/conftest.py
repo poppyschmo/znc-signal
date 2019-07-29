@@ -37,6 +37,14 @@ def _inject_paths():
 _inject_paths()
 
 
+# Add doctest from Signal.ootil
+def pytest_collect_file(path, parent):
+    if path.basename == "conftest.py":
+        from _pytest.doctest import DoctestModule
+        from Signal.ootil import __file__ as oofile
+        return DoctestModule(type(path)(oofile), parent)
+
+
 @pytest.fixture(autouse=True)
 def add_configgers_namespace(doctest_namespace):
     from Signal.lexpresser import eval_boolish_json, expand_subs, ppexp

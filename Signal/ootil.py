@@ -56,28 +56,6 @@ class GetLogger:
     Note: not sure why, but the (built-in) asyncio logging facility is
     only reliably enabled when the asyncio module has already been
     imported into the calling namespace (before calling this func)
-    ::
-        >>> import asyncio
-        >>> import io
-        >>> get_logger = GetLogger()
-        >>> cap = io.StringIO()
-        >>> get_logger.LOGFILE = cap
-        >>> get_logger("asyncio", "DEBUG")
-        <Logger asyncio (DEBUG)>
-        >>> async def bar():
-        ...     pass
-        >>> async def foo():
-        ...     bar()
-        >>> asyncio.get_event_loop().run_until_complete(foo())
-
-        # Check formatter
-        >>> 'asyncio.__del__: <CoroWrapper bar()' in cap.getvalue()
-        True
-
-        # Check exc
-        >>> 'never yielded from' in cap.getvalue()
-        True
-        >>> cap.close()
     """
     LEVEL = "DEBUG"
     LOGFILE = None
@@ -293,7 +271,7 @@ def timestr2dt(in_string):
 
     >>> dt = timestr2dt("2014-05-01T12:00:00.123456+01:00")
     >>> dt  # doctest: +ELLIPSIS
-    datetime.datetime(2014, 5, 1, 12, 0, 0, 123456, tzinfo=...(0, 3600)))
+    datetime.datetime(2014, 5, 1, 12, 0, 0, 123456, tzinfo=...3600)))
     >>> print(dt)
     2014-05-01 12:00:00.123456+01:00
     >>> timestr2dt(dt.isoformat()) == timestr2dt(str(dt)) == dt
@@ -301,7 +279,7 @@ def timestr2dt(in_string):
 
     >>> dt = timestr2dt("2014-05-01T12:00:00.123456-01:00")
     >>> dt  # doctest: +ELLIPSIS
-    datetime.datetime(2014, 5, 1, 12, 0, 0, 123456, tzinfo=...(-1, 82800)))
+    datetime.datetime(2014, 5, 1, 12, 0, 0, 123456, tzinfo=...82800)))
     >>> print(dt)
     2014-05-01 12:00:00.123456-01:00
     >>> timestr2dt(dt.isoformat()) == timestr2dt(str(dt)) == dt
@@ -309,7 +287,7 @@ def timestr2dt(in_string):
 
     >>> dt = timestr2dt("2014-05-01 12:00:00.123456789-01:00")
     >>> dt  # doctest: +ELLIPSIS
-    datetime.datetime(2014, 5, 1, 12, 0, 0, 123457, tzinfo=...(-1, 82800)))
+    datetime.datetime(2014, 5, 1, 12, 0, 0, 123457, tzinfo=...82800)))
     >>> print(dt)
     2014-05-01 12:00:00.123457-01:00
     >>> timestr2dt(dt.isoformat()) == timestr2dt(str(dt)) == dt
@@ -317,7 +295,7 @@ def timestr2dt(in_string):
 
     >>> dt = timestr2dt("2014-05-01 12:00:00,123456789-01:00")
     >>> dt  # doctest: +ELLIPSIS
-    datetime.datetime(2014, 5, 1, 12, 0, 0, 123457, tzinfo=...(-1, 82800)))
+    datetime.datetime(2014, 5, 1, 12, 0, 0, 123457, tzinfo=...82800)))
     >>> print(dt)
     2014-05-01 12:00:00.123457-01:00
     >>> timestr2dt(dt.isoformat()) == timestr2dt(str(dt)) == dt
