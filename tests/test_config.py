@@ -64,13 +64,13 @@ def test_access_by_pathname():
     '/'                => {'one': '1', 'three': {'five': {}, 'four': []}, ...}
     '.'                => {'one': '1', 'three': {'five': {}, 'four': []}, ...}
     '/one'             => '1'
-    '../two'           => KeyError('..',)
-    '/two/fake'        => KeyError('fake',)
+    '../two'           => KeyError('..')
+    '/two/fake'        => KeyError('fake')
     './three/four'     => []
-    './fake'           => KeyError('fake',)
+    './fake'           => KeyError('fake')
     'three/four/..'    => {'five': {}, 'four': []}
-    'three/five/fake'  => KeyError('fake',)
-    '/three/four/0'    => IndexError(0,)
+    'three/five/fake'  => KeyError('fake')
+    '/three/four/0'    => IndexError(0)
     """).strip()
     #
     # NOTE all of the following behavior is courtesy of os.path.normpath; the
@@ -100,7 +100,7 @@ def test_access_by_pathname():
     """).strip()
     #
     # Splitting dirname/basename (for assignment prep)
-    from collections import MutableSequence, MutableMapping
+    from collections.abc import MutableSequence, MutableMapping
     #
     # Bogus dirname component
     resolved, values, leaves = zip(*(access_by_pathname(sel, config, True) for
@@ -114,8 +114,8 @@ def test_access_by_pathname():
     '/'                => {'one': '1', ...}             ['']
     '.'                => {'one': '1', ...}             ['']
     '/one'             => {'one': '1', ...}             ['one']
-    '../two'           => KeyError('..',)               ['two']
-    '/two/fake'        => TypeError("Li...; got 'int'",)['fake']
+    '../two'           => KeyError('..')                ['two']
+    '/two/fake'        => TypeError("Li...d; got 'int'")['fake']
     './three/four'     => {'five': {}, ...}             ['four']
     './fake'           => {'one': '1', ...}             ['fake']
     'three/four/..'    => {'one': '1', ...}             ['three']
@@ -147,7 +147,7 @@ def test_access_by_pathname():
     arg = "three/four/0/0"
     sel, obj, key = access_by_pathname(arg, config, leafless=False)
     # Compare this to last param iteration of old doctest output above
-    assert str(sel) == arg and repr(obj) == "KeyError('0',)"
+    assert str(sel) == arg and repr(obj) == "KeyError('0')"
     #
     # Encountering an ErsatzList (with intent to set list item)
     # Note: corresponds to relevant section in "configgers.reaccess()"
@@ -208,12 +208,12 @@ def test_reaccess():
     '..'                '/'             '/'                 {'one': '1', ...}
     '/one'              '/one'          '/one'              '1'
     '../two'            '/two'          '/two'              2
-    '/two/fake'         '/two'          '/two/fake'         KeyError('fake',)
+    '/two/fake'         '/two'          '/two/fake'         KeyError('fake')
     '/three'            '/three'        '/three'            {'five': {}, ...}
     './four'            '/three/four'   '/three/four'       ['someval']
     '..'                '/three'        '/three'            {'five': {}, ...}
     'four'              '/three/four'   '/three/four'       ['someval']
-    '/three/four/fake'  '/three/four'   '/three/four/fake'  KeyError('fake',)
+    '/three/four/fake'  '/three/four'   '/three/four/fake'  KeyError('fake')
     './0'               '/three/four/0' '/three/four/0'     'someval'
     """).strip()
     #
@@ -230,7 +230,7 @@ def test_reaccess():
     """.strip()  # prefix, selector, object (in all[-1]), key
     #
     assert repr(reaccess("/dummy/all/-1", "fake", U, False)) == """
-    ('/dummy/all/-1', '/dummy/all/-1/fake', KeyError('fake',), None)
+    ('/dummy/all/-1', '/dummy/all/-1/fake', KeyError('fake'), None)
     """.strip()  # reverted, tried, result
     #
     # Empty selector is replaced with prefix
@@ -332,7 +332,7 @@ def test_update_config_dict():
     #
     pre, __, obj, key = reaccess("", "/dummy/all/1", U, wants_key=True)
     assert pre == "/dummy/all"
-    from collections import MutableSequence
+    from collections.abc import MutableSequence
     assert isinstance(obj, MutableSequence)  # <- [{'wild': '#foo*'}, {...}]
     assert update_config_dict(obj, key, val, as_json=False) is True
     assert obj[int(key)] == {"has": "foo"}
@@ -662,7 +662,7 @@ def test_validate_config():
         /conditions/custom/x_source 'bar' not in ('hostmask', 'nick')
         /conditions/default/x_source 'foo' not in ('hostmask', 'nick')
         /settings/authorized changed while attempting to load config:
-          ['one', 'two'] -> [ValueError('one',), ValueError('two',)]
+          ['one', 'two'] -> [ValueError('one'), ValueError('two')]
     """).strip()
     #
     loaded = dummy.peeled
@@ -715,7 +715,7 @@ def test_validate_config():
     assert not info
     assert "\n".join(warn) == dedent("""
         /templates/custom/format changed while attempting to load config:
-          '{nick}: {fake}' -> KeyError('fake',)
+          '{nick}: {fake}' -> KeyError('fake')
     """).strip()
     # Expression expansion
     loaded = deepcopy(stem)
@@ -726,7 +726,7 @@ def test_validate_config():
     assert not info
     assert "\n".join(warn) == dedent("""
         /expressions/custom changed while attempting to load config:
-          {'not': 'fake'} -> ValueError("Unknown reference: 'fake'",)
+          {'not': 'fake'} -> ValueError("Unknown reference: 'fake'")
     """).strip()
     # Expression eval
     loaded = deepcopy(stem)
@@ -735,7 +735,7 @@ def test_validate_config():
     assert not info
     assert "\n".join(warn) == dedent("""
         /expressions/foo changed while attempting to load config:
-          {'all': ''} -> TypeError("'all' needs a list",)
+          {'all': ''} -> TypeError("'all' needs a list")
     """).strip()
     # Superfluous items
     loaded = deepcopy(stem)
@@ -800,13 +800,13 @@ def test_validate_config():
     assert info == []
     assert "\n".join(warn) == dedent("""
         /templates/custom/focus_char changed while attempting to load config:
-          'ab' -> ValueError('Arg <raw> must be a single character',)
+          'ab' -> ValueError('Arg <raw> must be a single character')
     """).strip()
     loaded["templates"]["custom"]["focus_char"] = "U+"
     warn, info = validate_config(loaded)
     assert "\n".join(warn) == dedent("""
         /templates/custom/focus_char changed while attempting to load config:
-          'U+' -> ValueError("invalid literal for int() with base 16: ''",)
+          'U+' -> ValueError("invalid literal for int() with base 16: ''")
     """).strip()
 
 

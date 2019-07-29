@@ -1230,7 +1230,7 @@ class Signal(znc.Module):
                 try:
                     obj[key]
                 except (KeyError, TypeError) as exc:
-                    from collections import MutableSequence
+                    from collections.abc import MutableSequence
                     if (isinstance(exc, TypeError) and
                             not isinstance(obj, MutableSequence)):
                         raise
