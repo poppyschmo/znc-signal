@@ -5,7 +5,7 @@ from extras.inspect_hooks import znc, InspectHooks
 from extras.inspect_hooks.helpers import get_deprecated_hooks
 
 znc_url = "https://znc.in/releases/archive/znc-{rel}.tar.gz"
-pinned_releases = ("1.6.6", "1.7.0-rc1", "1.7.0", "1.7.1")
+pinned_releases = ("1.7.0", "1.7.1", "1.7.3", "1.7.4")
 
 
 class CullNonHooks(ast.NodeTransformer):
@@ -95,60 +95,50 @@ def cpymodule_hook_args(cpymodule_node):
 def test_normalize_hook_args(base_dir, cpymodule_hook_args):
     from conftest import any_in
     release, hook_args = cpymodule_hook_args
-    # Ensure 1.6.6 didn't suddenly add CMessage. Sad substitute for ensuring
-    # ``hasattr(znc, "CMessage")`` is False
+    # TODO see if any of this is still needed after ditching 1.6.x
     from glob import glob
     message_related = glob(f"{base_dir}/znc-{release}/**/Message.[hc]*",
                            recursive=True)
     #
-    # 1.6 stuff
-    if release.startswith("1.6"):
-        assert not message_related
-        one6_args = set.union(*(set(v) for v in hook_args.values()))
-        # Msg doesn't appear in any sub-1.7 sigs
-        assert "msg" not in one6_args
-    #
-    # 1.7+ stuff ("+" for now, we'll see)
-    else:
-        assert any_in([os.path.split(p)[-1] for p in message_related],
-                      "Message.h", "Message.cpp")
-        # Deal with outliers like Msg -> TextMessage and any future
-        # non-null/Message-analog pairing. Need an automated solution for
-        # flagging these in the future
-        outliers = {o.replace("TextMessage", "Msg") for o in
+    assert any_in([os.path.split(p)[-1] for p in message_related],
+                    "Message.h", "Message.cpp")
+    # Deal with outliers like Msg -> TextMessage and any future
+    # non-null/Message-analog pairing. Need an automated solution for
+    # flagging these in the future
+    outliers = {o.replace("TextMessage", "Msg") for o in
+                hook_args if
+                o.endswith("TextMessage") and
+                o.replace("TextMessage", "Msg") in hook_args}
+    outliers |= {o.replace("PlayMessage", "PlayLine") for o in
                     hook_args if
-                    o.endswith("TextMessage") and
-                    o.replace("TextMessage", "Msg") in hook_args}
-        outliers |= {o.replace("PlayMessage", "PlayLine") for o in
-                     hook_args if
-                     o.endswith("PlayMessage") and
-                     o.replace("PlayMessage", "PlayLine") in hook_args}
-        deprecados = {o.replace("Message", "") for
-                      o in hook_args if
-                      o.endswith("Message") and
-                      o.replace("Message", "") in hook_args}
-        assert not deprecados & outliers  # obvious (delete me)
-        # Hard-code these to literal expect values for now
-        assert outliers == {'OnChanMsg', 'OnPrivMsg', 'OnUserMsg',
-                            'OnPrivBufferPlayLine', 'OnChanBufferPlayLine'}
-        #
-        # Note: this no longer *directly* affects the main Signal class because
-        # it no longer imports "deprecated_hooks". However, the inspector
-        # helper still relies on it, and that's used to keep things current.
-        deprecated_hooks = get_deprecated_hooks(hook_args.keys())
-        assert deprecated_hooks == outliers | deprecados
-        #
-        # "Noisy" hooks (those containing "Raw" or "SendTo") don't contain
-        # "sLine" in 1.7+ unless deprecated
-        raw_sliners = {k for k, v in hook_args.items() if
-                       any_in(k, "Raw", "SendTo") and "sLine" in v}
-        assert not raw_sliners - deprecados
-        # TODO double check and replace previous with following, which holds
-        # and is stronger (meaning prev is obsolete because ``deprecados`` is
-        # meaningless without ``outliers`` and ``all_sliners`` includes
-        # ``raw_sliners``
-        all_sliners = {k for k, v in hook_args.items() if "sLine" in v}
-        assert not all_sliners - deprecated_hooks
+                    o.endswith("PlayMessage") and
+                    o.replace("PlayMessage", "PlayLine") in hook_args}
+    deprecados = {o.replace("Message", "") for
+                    o in hook_args if
+                    o.endswith("Message") and
+                    o.replace("Message", "") in hook_args}
+    assert not deprecados & outliers  # obvious (delete me)
+    # Hard-code these to literal expect values for now
+    assert outliers == {'OnChanMsg', 'OnPrivMsg', 'OnUserMsg',
+                        'OnPrivBufferPlayLine', 'OnChanBufferPlayLine'}
+    #
+    # Note: this no longer *directly* affects the main Signal class because
+    # it no longer imports "deprecated_hooks". However, the inspector
+    # helper still relies on it, and that's used to keep things current.
+    deprecated_hooks = get_deprecated_hooks(hook_args.keys())
+    assert deprecated_hooks == outliers | deprecados
+    #
+    # "Noisy" hooks (those containing "Raw" or "SendTo") don't contain
+    # "sLine" in 1.7+ unless deprecated
+    raw_sliners = {k for k, v in hook_args.items() if
+                    any_in(k, "Raw", "SendTo") and "sLine" in v}
+    assert not raw_sliners - deprecados
+    # TODO double check and replace previous with following, which holds
+    # and is stronger (meaning prev is obsolete because ``deprecados`` is
+    # meaningless without ``outliers`` and ``all_sliners`` includes
+    # ``raw_sliners``
+    all_sliners = {k for k, v in hook_args.items() if "sLine" in v}
+    assert not all_sliners - deprecated_hooks
 
 
 class C:
