@@ -42,7 +42,7 @@ def pytest_collect_file(path, parent):
     if path.basename == "conftest.py":
         from _pytest.doctest import DoctestModule
         from Signal.ootil import __file__ as oofile
-        return DoctestModule(type(path)(oofile), parent)
+        return DoctestModule.from_parent(parent, fspath=type(path)(oofile))
 
 
 @pytest.fixture(autouse=True)

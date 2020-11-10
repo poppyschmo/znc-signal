@@ -321,7 +321,10 @@ class FakeLoop(AbstractEventLoop):
     def __init__(self, module):
         self.module = module
 
-    def call_later(self, delay, callback, *args):
+    def call_soon(self, callback, *args, context=None):
+        return self.call_later(0, callback, *args, context=context)
+
+    def call_later(self, delay, callback, *args, context=None):
         """This is actually ``call_soon``"""
         assert delay == 0
         callback(*args)
