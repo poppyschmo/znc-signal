@@ -15,16 +15,19 @@ is_daemon() {
     return 1
 }
 
+EXE=/opt/signal-cli-$SIGNAL_CLI_VERSION/bin/signal-cli
+
+if ! test -x "$EXE"; then
+    echo "$EXE missing"
+    exit 1;
+fi
+
 if is_daemon "$@"; then
     while ! ensure_up >/dev/null 2>&1; do
         echo "Waiting for D-Bus..." >&2
         sleep 5
     done
-    opts=$SIGNAL_CLI_OPTS
 fi
 
-CP=/usr/share/java/libmatthew/unix.jar
-CP=$CP$(printf ':%s' /usr/share/java/signal-cli/*.jar)
-CMD=$(realpath "$(which java)")
 #                                                     shellcheck disable=SC2086
-exec "$CMD" $opts -cp "$CP" org.asamk.signal.Main "$@"
+exec "$EXE" "$@"

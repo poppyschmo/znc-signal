@@ -33,12 +33,12 @@ if [ $# -eq 0 ]; then
     fi >&2
 elif ! pgrep -f supervisord >/dev/null 2>&1; then
     echo "supervisord is not running"
-elif supervisorctl status signal-cli | grep -i stop; then
+elif supervisorctl status signal-cli | grep STOPPED; then
+    echo "signal-cli already stopped"
+else
     # Can't pgrep for signal-cli because it's continually stopped/restarted
     # when various checks fail at startup, e.g., account is 'unregistered'
     supervisorctl stop signal-cli  # exits 0 even if already stopped
-else
-    echo "signal-cli already stopped"
 fi >&2
 
 exec "$@"
