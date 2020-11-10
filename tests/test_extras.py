@@ -5,7 +5,7 @@ from extras.inspect_hooks import znc, InspectHooks
 from extras.inspect_hooks.helpers import get_deprecated_hooks
 
 znc_url = "https://znc.in/releases/archive/znc-{rel}.tar.gz"
-pinned_releases = ("1.7.0", "1.7.1", "1.7.3", "1.7.4")
+pinned_releases = ("1.8.2",)
 
 
 class CullNonHooks(ast.NodeTransformer):
@@ -101,7 +101,7 @@ def test_normalize_hook_args(base_dir, cpymodule_hook_args):
                            recursive=True)
     #
     assert any_in([os.path.split(p)[-1] for p in message_related],
-                    "Message.h", "Message.cpp")
+                   "Message.h", "Message.cpp")
     # Deal with outliers like Msg -> TextMessage and any future
     # non-null/Message-analog pairing. Need an automated solution for
     # flagging these in the future
@@ -110,13 +110,13 @@ def test_normalize_hook_args(base_dir, cpymodule_hook_args):
                 o.endswith("TextMessage") and
                 o.replace("TextMessage", "Msg") in hook_args}
     outliers |= {o.replace("PlayMessage", "PlayLine") for o in
-                    hook_args if
-                    o.endswith("PlayMessage") and
-                    o.replace("PlayMessage", "PlayLine") in hook_args}
+                 hook_args if
+                 o.endswith("PlayMessage") and
+                 o.replace("PlayMessage", "PlayLine") in hook_args}
     deprecados = {o.replace("Message", "") for
-                    o in hook_args if
-                    o.endswith("Message") and
-                    o.replace("Message", "") in hook_args}
+                  o in hook_args if
+                  o.endswith("Message") and
+                  o.replace("Message", "") in hook_args}
     assert not deprecados & outliers  # obvious (delete me)
     # Hard-code these to literal expect values for now
     assert outliers == {'OnChanMsg', 'OnPrivMsg', 'OnUserMsg',
@@ -131,7 +131,7 @@ def test_normalize_hook_args(base_dir, cpymodule_hook_args):
     # "Noisy" hooks (those containing "Raw" or "SendTo") don't contain
     # "sLine" in 1.7+ unless deprecated
     raw_sliners = {k for k, v in hook_args.items() if
-                    any_in(k, "Raw", "SendTo") and "sLine" in v}
+                   any_in(k, "Raw", "SendTo") and "sLine" in v}
     assert not raw_sliners - deprecados
     # TODO double check and replace previous with following, which holds
     # and is stronger (meaning prev is obsolete because ``deprecados`` is
@@ -174,7 +174,7 @@ class D(C):
 
     def do_wrap(self, f):
         def wrapped(*args, **kwargs):
-            print(f"Wrapped: ", end="")
+            print("Wrapped: ", end="")
             f(*args, **kwargs)
         from functools import update_wrapper
         return update_wrapper(wrapped, f)

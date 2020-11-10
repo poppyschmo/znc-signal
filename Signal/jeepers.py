@@ -4,13 +4,13 @@
 """
 Miscellaneous objects for the DBus connection
 """
+# XXX shocking/sad didn't grok static typing at all back whenever this file was
+# last touched. Too scared to look. Too lazy to fix.
 
 from jeepney.wrappers import MessageGenerator, new_method_call  # noqa E402
-from typing import List, TypeVar
+from typing import List, Union
 from collections import namedtuple
 
-
-R = TypeVar("R", str, List[str])
 
 incoming_NT = namedtuple("Incoming",
                          "timestamp source groupID message attachments")
@@ -43,7 +43,12 @@ class SignalMG(MessageGenerator):
                                (message, attachments, groupId))
 
     # Overloaded
-    def sendMessage(self, message: str, attachments: List[str], recip: R):
+    def sendMessage(
+        self,
+        message: str,
+        attachments: List[str],
+        recip: Union[str, List[str]]
+    ):
         signature = "sass" if isinstance(recip, str) else "sasas"
         return new_method_call(self, 'sendMessage',
                                signature, (message, attachments, recip))
