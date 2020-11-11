@@ -80,7 +80,7 @@ class String:
 
 class CZNC:
     def GetVersion():
-        return "1.7.0"
+        return "1.8.0"
 
 
 class CModInfo(Enum):

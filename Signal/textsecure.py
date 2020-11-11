@@ -474,13 +474,9 @@ class Signal(znc.Module):
             self.approx._wrights.connect(**kwargs)
 
     def OnLoad(self, argstr, message):
-        if self.znc_version < (1, 7):
-            message.s = "This module only works with ZNC 1.7+"
+        if self.znc_version < (1, 8):
+            message.s = "This module only works with ZNC 1.8+"
             return False
-        if not self.GetUser().IsAdmin():
-            message.s = "You must be an admin to use this module"
-            return False
-        #
         # Update instance attrs with argstr and envvars; this is only called
         # here, so there's no reason to patch class with yet more funcs
         from .commonweal import update_module_attributes
@@ -606,7 +602,7 @@ class Signal(znc.Module):
             # being registered
         return
 
-    def handle_incoming(self, incoming: "incoming_NT"):
+    def handle_incoming(self, incoming):
         """Interpret and respond to incoming instructions
 
         Right now, this is mainly just a placeholder. Everything is
@@ -1014,9 +1010,9 @@ class Signal(znc.Module):
             if skip_dropped:
                 info = [l for l in info if "dropped" not in l]
             if info:
-                msg += [f"\x02FYI:\x02\n"] + info
+                msg += ["\x02FYI:\x02\n"] + info
             if warn:
-                msg += [f"\x02Potential problems:\x02\n"] + warn
+                msg += ["\x02Potential problems:\x02\n"] + warn
             if msg:
                 self.put_pretty("\n".join(msg))
             return False if warn else True
