@@ -1120,7 +1120,9 @@ class Signal(znc.Module):
             return self.cmd_select("/", depth=0)
         if export:
             self.manage_config("save", force=force)
-            return self.manage_config("export", force=force, path=path)
+            return self.manage_config(
+                "export", force=force, as_json=as_json, path=path
+            )
         if self.config is None:
             self.manage_config("load")
         if remove is True:
