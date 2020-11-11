@@ -421,9 +421,13 @@ def test_cmd_update(signal_stub):
     cmd_select("/conditions")
     C = sig.config.conditions
     assert list(C) == ["custom", "default"]
-    assert cmd_update("foo", SerialSuspect("{}")) == dedent("""
-        Selected: /conditions/foo =>
+    assert cmd_update("blah", SerialSuspect("{}")) == dedent("""
+        Selected: /conditions/blah =>
           {'enabled': True, 'away_only': False, ...}
+    """).strip()
+    assert cmd_update("foo", rename=True) == dedent("""
+        Item moved; current selection has changed
+        /conditions => {'custom': {...}, 'foo': {}, 'default': {...}}
     """).strip()
     cmd_update("/conditions/bar", SerialSuspect("{}"))
     cmd_update("/conditions/baz", SerialSuspect("{}"))

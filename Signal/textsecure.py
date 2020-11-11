@@ -1215,7 +1215,7 @@ class Signal(znc.Module):
                 exc.args = ("{}: {}"
                             .format(obj.__class__.__name__,
                                     ", ".join(repr(o) for o in obj.args)),)
-            msg = "\n  ".join((msg, *exc.args))
+            msg = "\n  ".join((msg, *(str(o) for o in exc.args)))
         else:
             assert result is True
             if remove is True:

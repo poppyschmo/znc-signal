@@ -500,13 +500,16 @@ class ConditionsDict(BaseConfigDict):
     def validate_prospect(self, key, item):
         if key in self.backing:
             raise KeyError("Cannot set protected key: %r" % key)
-        if not isinstance(item, dict):  # deny ChainMaps, UserDicts
+        if not isinstance(item, (dict, Condition)):  # deny ChainMaps, UserDicts
             nested_msg = gen_nested_type_error_msg(self)
             raise TypeError(*(nested_msg % type(item).__name__)
                             .splitlines(), dict)
 
     def _setitem(self, key, item):
         """Create a new mapper tethered to the default"""
+        # Maybe just assign existing reference? This makes a copy
+        if isinstance(item, Condition):
+            item = item.peel()
         self.data[key] = self.mapper(dict(__=self.data[self.defkey]),
                                      user_map=item)
 
