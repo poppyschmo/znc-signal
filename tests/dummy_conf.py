@@ -101,12 +101,12 @@ ini = """\
     obey = False
     #authorized = []
     auto_connect = True
-    #config_version = 0.2
+    #config_version = 0.3
 
 [expressions]
     custom = {"has": "fixed string"}
     dummy = {"all": [{"wild": "#foo*"}, {"! i has": "bar"}]}
-    #default = {"has": ""}
+    #pass = {"has": ""}
     #drop = {"! has": ""}
 
 [templates]
@@ -137,14 +137,14 @@ ini = """\
         #x_policy = filter
         #x_source = hostmask
         network = dummy
-        #channel = default
+        #channel = pass
         source = dummy
         #body = drop
 """
 
 ini_stub_expanded_expressions = """\
 [expressions]
-    #default = {"has": ""}
+    #pass = {"has": ""}
     custom =
         {
           "has": "fixed string"

@@ -139,10 +139,10 @@ def test_cmd_select(signal_stub):
                   'obey': False,
                   'authorized': [],
                   'auto_connect': True,
-                  'config_version': 0.2},
+                  'config_version': 0.3},
      'expressions': {'custom': {...},
                      'dummy': {...},
-                     'default': {...},
+                     'pass': {...},
                      'drop': {...}},
      'templates': {'default': {...}},
      'conditions': {'custom': {...}, 'default': {...}}}""")
@@ -167,14 +167,14 @@ def test_cmd_select(signal_stub):
                   'obey': False,
                   'authorized': [],
                   'auto_connect': True,
-                  'config_version': 0.2}""")
+                  'config_version': 0.3}""")
     assert cmd_select() == out_repeat_settings
     assert cmd_select(".") == settings_stashed  # no "=>" reminder
     assert cmd_select() == out_repeat_settings
     out_expr = dedent("""\
     {'custom': {'has': 'fixed string'},
      'dummy': {'all': [...]},
-     'default': {'has': ''},
+     'pass': {'has': ''},
      'drop': {'! has': ''}}""")
     assert (cmd_select("/expressions") == cmd_select("../expressions")
             == cmd_select("has/../") == out_expr)
@@ -348,7 +348,7 @@ def test_cmd_update(signal_stub):
         Item deleted; current selection has changed
         /expressions => {'custom': {...},
                          'dummy': {...},
-                         'default': {...},
+                         'pass': {...},
                          'drop': {...}}
     """).strip()
     new_exp = SerialSuspect('{"not": {"has": "foo"}}')
@@ -359,15 +359,15 @@ def test_cmd_update(signal_stub):
         "Selected: /expressions/new => {'not': {...}}"
     assert cmd_update("not/has", "bar") == \
         "Selected: /expressions/new/not/has => 'bar'"
-    assert cmd_update("../../../default", '{"has any": ["one", "two"]}') == \
-        "Selected: /expressions/default => {'has any': [...]}"
+    assert cmd_update("../../../pass", '{"has any": ["one", "two"]}') == \
+        "Selected: /expressions/pass => {'has any': [...]}"
     #
     # TemplatesDict -----------------------------------------------------------
     assert cmd_update("/templates/custom", "'not a dict'") == dedent("""
         Problem setting /templates/custom to "'not a dict'":
           Templates must be JSON objects or Python dicts, not 'str'.
           See '/templates/*' for reference.
-        Selected: /expressions/default => {'has any': [...]}
+        Selected: /expressions/pass => {'has any': [...]}
     """).strip()
     # Create new record with @@ form
     # Note: adjusting the "format" string can produce what looks like buggy
@@ -395,7 +395,7 @@ def test_cmd_update(signal_stub):
         /expressions => {'custom': {...},
                          'dummy': {...},
                          'old': {...},
-                         'default': {...},
+                         'pass': {...},
                          'drop': {...}}
     """).strip()
     assert "new" not in sig.config.expressions
@@ -407,7 +407,7 @@ def test_cmd_update(signal_stub):
         /expressions => {'custom': {...},
                          'dummy': {...},
                          'new': {...},
-                         'default': {...},
+                         'pass': {...},
                          'drop': {...}}
     """).strip()
     assert stashed == sig.config.expressions["new"]

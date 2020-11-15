@@ -57,10 +57,10 @@ default_config = config_NT(**{
         "obey": True,               # listen for and run incoming instructions
         "authorized": [],           # numbers authorized to issue instructions
         "auto_connect": False,
-        "config_version": 0.2
+        "config_version": 0.3
     },
     "expressions": {
-        "default": {"has": ""},      # i.e., always True, use !has "" for False
+        "pass": {"has": ""},      # i.e., always True, use !has "" for False
         "drop": {"! has": ""}
     },
     # NOTE until upstream adds reverse lookup for contacts and groups, it makes
@@ -106,9 +106,9 @@ default_config = config_NT(**{
             "x_policy": "filter",    # filter|first (i.e., and|or, all|any)
             "x_source": "hostmask",  # nick|hostmask (nick!ident@host)
             # named expressions
-            "network": "default",    # "default" -> /expressions/default
-            "channel": "default",    # skipped if context is N/A
-            "source": "default",     # see x_source, above
+            "network": "pass",       # "pass" -> /expressions/pass
+            "channel": "pass",       # skipped if context is N/A
+            "source": "pass",        # see x_source, above
             "body": "drop"
         }
     },
@@ -406,7 +406,8 @@ def validate_config(loaded):
     #
     if "expressions" in peeled:
         etable = dict(peeled["expressions"])
-        etable.setdefault("default", default_config.expressions["default"])
+        etable.setdefault("pass", default_config.expressions["pass"])
+        etable.setdefault("drop", default_config.expressions["drop"])
         from .lexpresser import expand_subs, eval_boolish_json
         for name, expr in peeled["expressions"].items():
             try:
@@ -476,7 +477,7 @@ def validate_config(loaded):
                             "in /templates")
             for eref in ("channel", "network", "source", "body"):
                 if (eref in cond and cond[eref] not in
-                        peeled.get("expressions", {}).keys() | {"default"}):
+                        peeled.get("expressions", {}).keys() | {"pass", "drop"}):
                     warn.append(f"{pfx}/{eref} {cond[eref]!r} not found in "
                                 "/expressions")
     #

@@ -485,12 +485,12 @@ def test_parse_ini():
     assert parse_ini(sections) == dummy.peeled
     # Commented-out version present in settings section but peeled away from
     # parsed dict (because it matches latest version)
-    assert "#config_version = 0.2" in sections["settings"]
+    assert "#config_version = 0.3" in sections["settings"]
     assert "config_version" not in dummy.peeled["settings"]
     #
     # An obsolete version number is retained even when commented out
     sections["settings"] = sections["settings"].replace(
-        "#config_version = 0.2", "#config_version = 0.1"
+        "#config_version = 0.3", "#config_version = 0.1"
     )
     parsed = parse_ini(sections)
     verdiff = parsed["settings"].pop("config_version")
@@ -514,14 +514,14 @@ def test_gen_ini():
     from copy import deepcopy
     from textwrap import dedent
     modded = deepcopy(loaded)
-    modded["expressions"].update({"default": {"! has": ""}})
+    modded["expressions"].update({"pass": {"! has": ""}})
     converted = construct_config(modded)
     generated = gen_ini(converted)
     assert subdivide_ini(generated)["expressions"].rstrip() == dedent("""
     [expressions]
         custom = {"has": "fixed string"}
         dummy = {"all": [{"wild": "#foo*"}, {"! i has": "bar"}]}
-        default = {"! has": ""}
+        pass = {"! has": ""}
         #drop = {"! has": ""}
     """).strip()
     #
@@ -586,10 +586,10 @@ def test_construct_config():
         construct_config(loaded)
     assert "Expressions must be" in repr(exc_info.value)
     # Default caught earlier, but same exception type thrown
-    loaded = {"expressions": {"default": None}}
+    loaded = {"expressions": {"pass": None}}
     with pytest.raises(TypeError) as def_exc_info:
         construct_config(loaded)
-    assert "Expressions/default must be" in repr(def_exc_info.value)
+    assert "Expressions/pass must be" in repr(def_exc_info.value)
     assert def_exc_info.traceback[-1].name == exc_info.traceback[-1].name
     assert def_exc_info.traceback[-1].lineno != exc_info.traceback[-1].lineno
     #
@@ -671,11 +671,11 @@ def test_validate_config():
     # Ensure values in custom entry that happens to match ones in
     # outermost protected mapping are retained when (inner) default
     # entry shadows outer (confuso)
-    assert default_config.conditions["default"]["source"] == "default"
+    assert default_config.conditions["default"]["source"] == "pass"
     assert loaded["conditions"]["default"]["source"] == "dummy"
     assert loaded["conditions"]["custom"]["source"] == "custom"
-    loaded["conditions"]["custom"]["source"] = "default"  # ↓
-    assert loaded["conditions"]["custom"]["source"] == "default"
+    loaded["conditions"]["custom"]["source"] = "pass"  # ↓
+    assert loaded["conditions"]["custom"]["source"] == "pass"
     assert validate_config(loaded) == ([], [])
     #
     # Skip /settings/host and /templates/*/recipients warnings:
@@ -706,7 +706,7 @@ def test_validate_config():
     warn, info = validate_config(loaded)
     assert not warn
     assert info == [
-        "/settings/config_version: 0.2 was dropped; reason: default"
+        "/settings/config_version: 0.3 was dropped; reason: default"
     ]
     # Template format
     loaded = deepcopy(stem)
@@ -772,7 +772,7 @@ def test_validate_config():
     # Named expressions
     loaded = deepcopy(stem)
     loaded.update({"expressions": {"dummy": {"has": "foo"}},
-                   "conditions": {"custom": {"source": "default",
+                   "conditions": {"custom": {"source": "pass",
                                              "channel": "dummy",
                                              "body": "fake"}}})
     warn, info = validate_config(loaded)
@@ -780,7 +780,7 @@ def test_validate_config():
         "/conditions/custom/body 'fake' not found in /expressions"
     ]
     assert info == [
-        "/conditions/custom/source: 'default' was dropped; reason: default"
+        "/conditions/custom/source: 'pass' was dropped; reason: default"
     ]
     # Scope members out-of-order
     loaded = deepcopy(stem)
@@ -956,8 +956,10 @@ def test_manage_config(signal_stub_debug):
     assert ["conditions", "expressions", "templates"] == sorted(dkds)
     # Although /expressions has "defkey", its items are single-item dicts, so
     # spread-peeling is the same as bake(). Hence, no "spread" attr.
-    assert json_exported["expressions"]["default"] == \
-        sig.config.expressions.peel(False)["default"]
+    assert json_exported["expressions"]["pass"] == \
+        sig.config.expressions.peel(False)["pass"]
+    assert json_exported["expressions"]["drop"] == \
+        sig.config.expressions.peel(False)["drop"]
     dkds.remove("expressions")
     assert not hasattr(sig.config.expressions, "spread")
     for cat in dkds:

@@ -179,7 +179,7 @@ def test_reckon(signal_stub_debug):
     assert sig.config.expressions["custom"] == {"has": "dummy"}
     assert reckon(sig.config, data, sig.debug) is False
     assert data_reck == ["<custom", "!network>", "<default", "!body>"]
-    sig.cmd_update("/conditions/custom/network", "default")
+    sig.cmd_update("/conditions/custom/network", "pass")
     #
     # Channel
     current_defaults.remove("channel")
@@ -190,7 +190,7 @@ def test_reckon(signal_stub_debug):
     assert reckon(sig.config, data, sig.debug) is False
     assert data_reck == ["<custom", "!body>", "<default", "!body>"]
     sig.cmd_update("/expressions/custom/has", "dummy")
-    sig.cmd_update("/conditions/custom/channel", "default")
+    sig.cmd_update("/conditions/custom/channel", "pass")
     #
     # Source
     current_defaults.remove("source")
@@ -209,7 +209,7 @@ def test_reckon(signal_stub_debug):
     assert reckon(sig.config, data, sig.debug) is False
     assert data_reck == ["<custom", "!body>", "<default", "!body>"]
     sig.cmd_update("/conditions/custom/x_source", remove=True)
-    sig.cmd_update("/conditions/custom/source", "default")
+    sig.cmd_update("/conditions/custom/source", "pass")
     #
     # Body
     current_defaults.remove("body")
@@ -223,12 +223,13 @@ def test_reckon(signal_stub_debug):
     data["body"] = ""
     assert reckon(sig.config, data, sig.debug) is False
     assert data_reck == ["<custom", "!body>", "<default", "!body>"]
-    sig.cmd_update("/conditions/custom/body", "default")
+    sig.cmd_update("/conditions/custom/body", "drop")
     data["body"] = "Welcome dummy!"
     #
-    # Change default condition to always fail
-    sig.OnModCommand('update /expressions/default @@ {"!has": ""}')
-    assert conds["custom"]["body"] == "default"
+    # Make pass the same as drop
+    sig.OnModCommand('update /expressions/pass @@ {"!has": ""}')
+    assert conds["custom"]["body"] == "drop"
+    sig.cmd_update("/conditions/custom/body", "pass")
     assert reckon(sig.config, data, sig.debug) is False
     assert data_reck == ["<custom", '!network>', "<default", '!network>']
     #

@@ -200,7 +200,7 @@ def test_settings_dict():
     assert U1.peel() == user_in == U1.user
     # But full baking *does*
     assert "authorized" in U1.bake() and U1.bake() != user_in
-    assert U1.bake() == dict(**user_in, authorized=[], config_version=0.2)
+    assert U1.bake() == dict(**user_in, authorized=[], config_version=0.3)
     # "authorized" gets inserted at the end, so reprs won't match
     assert repr(U1.bake()) != repr(dict(**user_in, authorized=[]))
     with pytest.raises(KeyError) as exc_info:
@@ -267,7 +267,9 @@ def test_expressions_dict():
     #
     # Can't delete default
     with pytest.raises(KeyError):
-        del U["default"]
+        del U["pass"]
+    with pytest.raises(KeyError):
+        del U["drop"]
     # Calling clear() doesn't delete backing dict
     assert not U.maps[0]
     U["not_default"] = {"has": "foo"}
@@ -276,45 +278,45 @@ def test_expressions_dict():
     assert not U.maps[0]
     assert len(U.maps) == 2 and U.maps[-1]
     # Expression ops are not checked here
-    U["default"] = {"fake key": "fake value"}
-    assert U["default"] == {"fake key": "fake value"}
+    U["pass"] = {"fake key": "fake value"}
+    assert U["pass"] == {"fake key": "fake value"}
     # Expressions values are not checked for type
-    U["default"] = {"fake key": ...}
+    U["pass"] = {"fake key": ...}
     # Flattening creates new objects
-    assert U.bake()["default"]["fake key"] == U["default"]["fake key"]
-    assert U.bake()["default"] is not U["default"]
+    assert U.bake()["pass"]["fake key"] == U["pass"]["fake key"]
+    assert U.bake()["pass"] is not U["pass"]
     # Can delete user-shadowed item
-    del U["default"]
+    del U["pass"]
     #
-    assert U["default"] != {}  # -> mappingproxy({'has': ''})
-    assert U["default"] == U_v1["default"]
+    assert U["pass"] != {}  # -> mappingproxy({'has': ''})
+    assert U["pass"] == U_v1["pass"]
     #
     # If user item compares equal to protected counterpart, it's peeled away
-    U["default"] = dict(U["default"])
+    U["pass"] = dict(U["pass"])
     assert U.peel() == {}
-    del U["default"]
+    del U["pass"]
     # Note: see settings/conditions variants for nested chain maps
-    D_v1 = {"default": {"all": [{"has": "foo"}, {"!has": "bar"}]}}
+    D_v1 = {"pass": {"all": [{"has": "foo"}, {"!has": "bar"}]}}
     U_v2 = ExpressionsDict(D_v1, user_map={})
     # Mapping proxies compare equal to normal dicts
-    assert repr(U_v2["default"]).startswith("mappingproxy(mappingproxy(")
-    assert U_v2["default"] == {'all': [{'has': 'foo'}, {'!has': 'bar'}]}
+    assert repr(U_v2["pass"]).startswith("mappingproxy(mappingproxy(")
+    assert U_v2["pass"] == {'all': [{'has': 'foo'}, {'!has': 'bar'}]}
     # Changing value of nested rhs item causes comparison to fail
-    assert U_v2["default"] != {'all': [{'has': 'foo'}, {'!has': 'baz'}]}
-    U_v2["default"] = {'all': [{'has': 'foo'}, {'!has': 'bar'}]}
+    assert U_v2["pass"] != {'all': [{'has': 'foo'}, {'!has': 'baz'}]}
+    U_v2["pass"] = {'all': [{'has': 'foo'}, {'!has': 'bar'}]}
     # Follows for nested protected entry
     assert U_v2.peel() == {}
-    U_v2["default"]["all"][-1]["!has"] = "baz"
+    U_v2["pass"]["all"][-1]["!has"] = "baz"
     assert U_v2.peel() == \
-        {"default": {'all': [{'has': 'foo'}, {'!has': 'baz'}]}}
+        {"pass": {'all': [{'has': 'foo'}, {'!has': 'baz'}]}}
     #
     # Accessing items
-    exp_name, exp_val = list(D["default"].items()).pop()  # -> ("has", "")
-    assert isinstance(U["default"][exp_name], type(exp_val))
+    exp_name, exp_val = list(D["pass"].items()).pop()  # -> ("has", "")
+    assert isinstance(U["pass"][exp_name], type(exp_val))
     with pytest.raises(TypeError):
-        del U["default"][exp_name]
+        del U["pass"][exp_name]
     with pytest.raises(TypeError):
-        U["default"][exp_name] = "some value"
+        U["pass"][exp_name] = "some value"
     #
     U["custom"] = {"fake key": "fake value"}
     assert len(U.bake()) == 3
@@ -336,15 +338,15 @@ def test_expressions_dict():
     assert repr(D) == D_snapshot
     #
     # Ordering (everything's constantly sorted)
-    assert list(U) == ['custom', 'default', 'drop']
+    assert list(U) == ['custom', 'pass', 'drop']
     for key in "zebra":
         U[key] = {}
-    assert list(U) == ['a', 'b', 'custom', 'e', 'r', 'z', 'default', 'drop']
+    assert list(U) == ['a', 'b', 'custom', 'e', 'r', 'z', 'pass', 'drop']
     assert U.peel() == {'a': {}, 'b': {}, 'custom': {'fake key': 'fake value'},
                         'e': {}, 'r': {}, 'z': {}}
     # Modifying an existing item occurs in place (nothing reinserted)
     U["b"] = {"! has": "foo"}
-    assert list(U) == ['a', 'b', 'custom', 'e', 'r', 'z', 'default', 'drop']
+    assert list(U) == ['a', 'b', 'custom', 'e', 'r', 'z', 'pass', 'drop']
     assert list(U.peel()) == ['a', 'b', 'custom', 'e', 'r', 'z']
     assert U.peel()["b"] == {"! has": "foo"}
 
@@ -430,7 +432,7 @@ def test_conditions_dict():
     # Ordering - both "custom" and "default" dummy conditions have their
     # expressions out-of-order (compared to backing default dict)
     ds_cus = [list(D["default"]).index(k) for k in dummy_saved["custom"]]
-    assert list(sorted(ds_cus)) != ds_cus  # [1, 5, 7, 11, 15, 14] for v0.2
+    assert list(sorted(ds_cus)) != ds_cus  # [1, 5, 7, 11, 15, 14] for v0.3
     assert list(dummy_saved["custom"])[-2:] == ['body', 'source']
     ds_def = [list(D["default"]).index(k) for k in dummy_saved["default"]]
     assert list(sorted(ds_def)) != ds_def  # [3, 6, 14, 12]
