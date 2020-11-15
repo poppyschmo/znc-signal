@@ -60,7 +60,8 @@ default_config = config_NT(**{
         "config_version": 0.2
     },
     "expressions": {
-        "default": {"has": ""}      # i.e., always True, use !has "" for False
+        "default": {"has": ""},      # i.e., always True, use !has "" for False
+        "drop": {"! has": ""}
     },
     # NOTE until upstream adds reverse lookup for contacts and groups, it makes
     # little sense to include these as options for /templates/*/recipients.
@@ -108,7 +109,7 @@ default_config = config_NT(**{
             "network": "default",    # "default" -> /expressions/default
             "channel": "default",    # skipped if context is N/A
             "source": "default",     # see x_source, above
-            "body": "default"
+            "body": "drop"
         }
     },
 })

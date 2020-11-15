@@ -107,6 +107,7 @@ ini = """\
     custom = {"has": "fixed string"}
     dummy = {"all": [{"wild": "#foo*"}, {"! i has": "bar"}]}
     #default = {"has": ""}
+    #drop = {"! has": ""}
 
 [templates]
     [default]
@@ -138,7 +139,7 @@ ini = """\
         network = dummy
         #channel = default
         source = dummy
-        #body = default
+        #body = drop
 """
 
 ini_stub_expanded_expressions = """\

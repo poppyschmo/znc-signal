@@ -522,6 +522,7 @@ def test_gen_ini():
         custom = {"has": "fixed string"}
         dummy = {"all": [{"wild": "#foo*"}, {"! i has": "bar"}]}
         default = {"! has": ""}
+        #drop = {"! has": ""}
     """).strip()
     #
     modded = deepcopy(loaded)
@@ -559,7 +560,7 @@ def test_construct_config():
     from collections import OrderedDict as OD
     cats = structed[0]  # all same
     #
-    assert [len(d) for d in cats] == [6, 1, 1, 1]
+    assert [len(d) for d in cats] == [6, 2, 1, 1]
     #
     assert OD({k: OD(v.bake()) for k, v in cats._asdict().items()}) == \
         OD({c: OD(d) for c, d in default_config._asdict().items()})

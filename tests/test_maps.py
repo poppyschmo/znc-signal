@@ -317,7 +317,7 @@ def test_expressions_dict():
         U["default"][exp_name] = "some value"
     #
     U["custom"] = {"fake key": "fake value"}
-    assert len(U.bake()) == 2
+    assert len(U.bake()) == 3
     assert len(U.peel()) == 1
     with pytest.raises(TypeError):
         U["invalid"] = ...
@@ -336,15 +336,15 @@ def test_expressions_dict():
     assert repr(D) == D_snapshot
     #
     # Ordering (everything's constantly sorted)
-    assert list(U) == ['custom', 'default']
+    assert list(U) == ['custom', 'default', 'drop']
     for key in "zebra":
         U[key] = {}
-    assert list(U) == ['a', 'b', 'custom', 'e', 'r', 'z', 'default']
+    assert list(U) == ['a', 'b', 'custom', 'e', 'r', 'z', 'default', 'drop']
     assert U.peel() == {'a': {}, 'b': {}, 'custom': {'fake key': 'fake value'},
                         'e': {}, 'r': {}, 'z': {}}
     # Modifying an existing item occurs in place (nothing reinserted)
     U["b"] = {"! has": "foo"}
-    assert list(U) == ['a', 'b', 'custom', 'e', 'r', 'z', 'default']
+    assert list(U) == ['a', 'b', 'custom', 'e', 'r', 'z', 'default', 'drop']
     assert list(U.peel()) == ['a', 'b', 'custom', 'e', 'r', 'z']
     assert U.peel()["b"] == {"! has": "foo"}
 

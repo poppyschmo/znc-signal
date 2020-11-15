@@ -101,14 +101,14 @@ def wreck_one(name, cond, data, config, debug):
             return disposition
     # body (message body)
     body = data["body"]
-    if body:
-        path = f"/conditions/{name}/body"
-        expr_key = cond["body"]
-        if disposition is expressed(path, expr_key, body,
-                                    config.expressions, cond):
-            if debug:
-                reason.append(dism.format("body"))
-            return disposition
+    assert body is not None
+    path = f"/conditions/{name}/body"
+    expr_key = cond["body"]
+    if disposition is expressed(path, expr_key, body,
+                                config.expressions, cond):
+        if debug:
+            reason.append(dism.format("body"))
+        return disposition
     #
     if disposition is FILTER:
         if debug:

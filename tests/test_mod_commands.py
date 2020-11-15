@@ -142,7 +142,8 @@ def test_cmd_select(signal_stub):
                   'config_version': 0.2},
      'expressions': {'custom': {...},
                      'dummy': {...},
-                     'default': {...}},
+                     'default': {...},
+                     'drop': {...}},
      'templates': {'default': {...}},
      'conditions': {'custom': {...}, 'default': {...}}}""")
     #
@@ -173,7 +174,8 @@ def test_cmd_select(signal_stub):
     out_expr = dedent("""\
     {'custom': {'has': 'fixed string'},
      'dummy': {'all': [...]},
-     'default': {'has': ''}}""")
+     'default': {'has': ''},
+     'drop': {'! has': ''}}""")
     assert (cmd_select("/expressions") == cmd_select("../expressions")
             == cmd_select("has/../") == out_expr)
     assert cmd_select("/expressions/custom/has") == "'fixed string'"
@@ -344,7 +346,10 @@ def test_cmd_update(signal_stub):
     """).strip()
     assert cmd_update(remove=True) == dedent("""
         Item deleted; current selection has changed
-        /expressions => {'custom': {...}, 'dummy': {...}, 'default': {...}}
+        /expressions => {'custom': {...},
+                         'dummy': {...},
+                         'default': {...},
+                         'drop': {...}}
     """).strip()
     new_exp = SerialSuspect('{"not": {"has": "foo"}}')
     assert cmd_update("new", new_exp, as_json=True) == \
@@ -390,7 +395,8 @@ def test_cmd_update(signal_stub):
         /expressions => {'custom': {...},
                          'dummy': {...},
                          'old': {...},
-                         'default': {...}}
+                         'default': {...},
+                         'drop': {...}}
     """).strip()
     assert "new" not in sig.config.expressions
     assert stashed == sig.config.expressions["old"]
@@ -401,7 +407,8 @@ def test_cmd_update(signal_stub):
         /expressions => {'custom': {...},
                          'dummy': {...},
                          'new': {...},
-                         'default': {...}}
+                         'default': {...},
+                         'drop': {...}}
     """).strip()
     assert stashed == sig.config.expressions["new"]
     #
