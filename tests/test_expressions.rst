@@ -107,6 +107,8 @@ ALL
     >>> all_false = {"all": [has_all_true, has_all_false]}   # T && F
     >>> feed(all_false)
     False
+    >>> feed({"all": []})                                    # T
+    True
 
 ANY
     >>> any_true = {"any": [has_all_true, has_all_false]}    # T || F
@@ -114,6 +116,8 @@ ANY
     True
     >>> any_false = {"any": [has_all_false, has_any_false]}  # F || F
     >>> feed(any_false)
+    False
+    >>> feed({"any": []})                                    # F
     False
 
 I, (i)

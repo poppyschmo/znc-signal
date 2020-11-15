@@ -226,12 +226,36 @@ def test_reckon(signal_stub_debug):
     sig.cmd_update("/conditions/custom/body", "$drop")
     data["body"] = "Welcome dummy!"
     #
+    # Inline expression
+    sig.OnModCommand(
+        'update /conditions/custom/body @@ {"any": []}'
+    )  # same as !has ""
+    assert reckon(sig.config, data, sig.debug) is False
+    assert data_reck == ["<custom", "!body>", "<default", "!body>"]
+    sig.OnModCommand(
+        'update /conditions/custom/body @@ {"i has": "welcome"}'
+    )
+    assert reckon(sig.config, data, sig.debug) is True
+    assert data_reck == ["<custom", "&>"]
+    sig.cmd_update("/conditions/custom/body", "$drop")
+    #
     # Make pass the same as drop
     sig.OnModCommand('update /expressions/pass @@ {"!has": ""}')
     assert conds["custom"]["body"] == "$drop"
     sig.cmd_update("/conditions/custom/body", "$pass")
     assert reckon(sig.config, data, sig.debug) is False
     assert data_reck == ["<custom", '!network>', "<default", '!network>']
+    #
+    # Use literal expression in condition
+    assert conds["custom"]["body"] == "$pass"
+    sig.cmd_update("/expressions/pass", remove=True)
+    assert sig.config.expressions["pass"] == {"has": ""}
+    sig.OnModCommand('update /conditions/custom/body @@ {"!has": ""}')
+    assert conds["custom"]["body"] == {"!has": ""}
+    assert reckon(sig.config, data, sig.debug) is False
+    assert data_reck == ["<custom", '!body>', "<default", '!body>']
+    sig.cmd_update("/conditions/custom/body", remove=True)
+    sig.OnModCommand('update /expressions/pass @@ {"any": []}')
     #
     # Change per-condition, collective expressions bias
     current_defaults.remove("x_policy")  # only governs expressions portion

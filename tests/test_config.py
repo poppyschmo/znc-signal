@@ -783,6 +783,11 @@ def test_validate_config():
     assert info == [
         "/conditions/custom/source: '$pass' was dropped; reason: default"
     ]
+    # Literal expressions
+    loaded = deepcopy(stem)
+    loaded.update({"conditions": {"custom": {"body": {"has": "foo"}}}})
+    warn, info = validate_config(loaded)
+    assert warn == info == []
     # Scope members out-of-order
     loaded = deepcopy(stem)
     loaded.update({"conditions": {"custom": {"scope": ["detached",

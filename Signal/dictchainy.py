@@ -164,6 +164,7 @@ class BaseConfigDict(UserDict):
     init_backing_visitors = None
     data_factory = None
     data_fact_kwargs = None
+    type_overrides = None
 
     def __init__(self, backing_map=None, *, user_map=None, **kwargs):
         if user_map is not None:
@@ -203,6 +204,10 @@ class BaseConfigDict(UserDict):
 
     def validate_prospect(self, key, item):
         if key not in self.backing:
+            return
+        if (self.type_overrides and
+                key in self.type_overrides and
+                type(item) in self.type_overrides[key]):
             return
         base_type = type(self.bake(self.backing)[key])
         # Can't use isinstance() here because bool subclasses int, etc.
@@ -314,9 +319,13 @@ class BaseConfigDict(UserDict):
                         if isinstance(v, BaseConfigDict):
                             # Never SettingsDict/ExpressionsDict/ConditionsDict
                             assert isinstance(v, (Condition, Template))
-                        else:
-                            # MappingProxyType or regular dict
-                            assert isinstance(self, ExpressionsDict)
+                        # MappingProxyType or regular dict
+                        elif not isinstance(self, ExpressionsDict):
+                            assert din.type_overrides and any(
+                                issubclass(t, MutableMapping)
+                                for t in din.type_overrides[k]
+                            ), (k, v, type(din))
+
                     d[k] = inner(v)
                 elif isinstance(v, ErsatzList):
                     d[k] = list(v)
@@ -456,6 +465,12 @@ class Condition(SettingsDict):
         useless.
     """
     diff_list_order = False
+    type_overrides = {
+        "network": (str, dict),
+        "channel": (str, dict),
+        "source": (str, dict),
+        "body": (str, dict),
+    }
 
     def __new__(cls, *args, **kwargs):
         inst = super(SettingsDict, cls).__new__(cls)  # BaseConfigDict

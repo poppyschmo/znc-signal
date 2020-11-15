@@ -378,7 +378,7 @@ def validate_config(loaded):
     except Exception as exc:
         if not isinstance(exc, AttributeError):
             warn.append("Error turning ingested data back into usable config")
-            warn.extend(a for a in exc.args if isinstance(a, str))
+            warn.extend(str(a) for a in exc.args)
     if warn:
         warn.append("Unable to continue; please fix existing errors")
         return warn, info
