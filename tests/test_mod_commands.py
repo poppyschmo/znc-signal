@@ -324,7 +324,7 @@ def test_cmd_update(signal_stub):
     """).strip()
     raw_string = SerialSuspect(
         '{"away_only":true,"timeout_post":360,"timeout_idle":120,'
-        '"x_source":"nick","body":"custom","source":"custom"}'
+        '"x_source":"nick","body":"$custom","source":"$custom"}'
     )
     assert cmd_update("custom", raw_string, as_json=True) == dedent("""
         Selected: /conditions/custom =>

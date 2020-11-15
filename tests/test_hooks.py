@@ -174,27 +174,27 @@ def test_reckon(signal_stub_debug):
     #
     # Network
     current_defaults.remove("network")
-    sig.cmd_update("/conditions/custom/network", "custom")
+    sig.cmd_update("/conditions/custom/network", "$custom")
     assert data["network"] == "testnet"
     assert sig.config.expressions["custom"] == {"has": "dummy"}
     assert reckon(sig.config, data, sig.debug) is False
     assert data_reck == ["<custom", "!network>", "<default", "!body>"]
-    sig.cmd_update("/conditions/custom/network", "pass")
+    sig.cmd_update("/conditions/custom/network", "$pass")
     #
     # Channel
     current_defaults.remove("channel")
-    sig.OnModCommand('update /conditions/custom/channel custom')
+    sig.OnModCommand('update /conditions/custom/channel $custom')
     assert reckon(sig.config, data, sig.debug) is False
     assert data_reck == ["<custom", "!channel>", "<default", "!body>"]
     sig.cmd_update("/expressions/custom/has", "test_chan")
     assert reckon(sig.config, data, sig.debug) is False
     assert data_reck == ["<custom", "!body>", "<default", "!body>"]
     sig.cmd_update("/expressions/custom/has", "dummy")
-    sig.cmd_update("/conditions/custom/channel", "pass")
+    sig.cmd_update("/conditions/custom/channel", "$pass")
     #
     # Source
     current_defaults.remove("source")
-    sig.OnModCommand('update /conditions/custom/source custom')
+    sig.OnModCommand('update /conditions/custom/source $custom')
     assert reckon(sig.config, data, sig.debug) is False
     assert data_reck == ["<custom", "!source>", "<default", "!body>"]
     sig.OnModCommand('update /expressions/custom @@ {"wild": "*testbot*"}')
@@ -209,11 +209,11 @@ def test_reckon(signal_stub_debug):
     assert reckon(sig.config, data, sig.debug) is False
     assert data_reck == ["<custom", "!body>", "<default", "!body>"]
     sig.cmd_update("/conditions/custom/x_source", remove=True)
-    sig.cmd_update("/conditions/custom/source", "pass")
+    sig.cmd_update("/conditions/custom/source", "$pass")
     #
     # Body
     current_defaults.remove("body")
-    sig.cmd_update("/conditions/custom/body", "custom")
+    sig.cmd_update("/conditions/custom/body", "$custom")
     assert reckon(sig.config, data, sig.debug) is False
     assert data_reck == ["<custom", "!body>", "<default", "!body>"]
     sig.OnModCommand('update /expressions/custom @@ {"has": "dummy"}')
@@ -223,13 +223,13 @@ def test_reckon(signal_stub_debug):
     data["body"] = ""
     assert reckon(sig.config, data, sig.debug) is False
     assert data_reck == ["<custom", "!body>", "<default", "!body>"]
-    sig.cmd_update("/conditions/custom/body", "drop")
+    sig.cmd_update("/conditions/custom/body", "$drop")
     data["body"] = "Welcome dummy!"
     #
     # Make pass the same as drop
     sig.OnModCommand('update /expressions/pass @@ {"!has": ""}')
-    assert conds["custom"]["body"] == "drop"
-    sig.cmd_update("/conditions/custom/body", "pass")
+    assert conds["custom"]["body"] == "$drop"
+    sig.cmd_update("/conditions/custom/body", "$pass")
     assert reckon(sig.config, data, sig.debug) is False
     assert data_reck == ["<custom", '!network>', "<default", '!network>']
     #
@@ -243,7 +243,7 @@ def test_reckon(signal_stub_debug):
     assert not current_defaults
     #
     # "FIRST" (short circuit) hit
-    sig.OnModCommand('update /conditions/custom/body custom')
+    sig.OnModCommand('update /conditions/custom/body $custom')
     assert reckon(sig.config, data, sig.debug) is True
     assert data_reck == ["<custom", "body!>"]
     #

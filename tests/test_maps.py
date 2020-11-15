@@ -443,11 +443,11 @@ def test_conditions_dict():
                 zip(json.dumps(U1.peel(), indent=2).splitlines(),
                 dummy.json_conditions.splitlines()) if new != orig]
     #                                   new     orig
-    assert reordiff == [('"source": "custom",', '"body": "custom",'),
-                        ('"body": "custom"', '"source": "custom"'),
+    assert reordiff == [('"source": "$custom",', '"body": "$custom",'),
+                        ('"body": "$custom"', '"source": "$custom"'),
                         # ^^^^^^^^^^^^ [custom / default] vvvvvvvvvvv
-                        ('"network": "dummy",', '"source": "dummy",'),
-                        ('"source": "dummy"', '"network": "dummy"')]
+                        ('"network": "$dummy",', '"source": "$dummy",'),
+                        ('"source": "$dummy"', '"network": "$dummy"')]
     #
     # The "protected" map of non-default dicts is just a link to the main
     # default, itself a chain map

@@ -671,11 +671,11 @@ def test_validate_config():
     # Ensure values in custom entry that happens to match ones in
     # outermost protected mapping are retained when (inner) default
     # entry shadows outer (confuso)
-    assert default_config.conditions["default"]["source"] == "pass"
-    assert loaded["conditions"]["default"]["source"] == "dummy"
-    assert loaded["conditions"]["custom"]["source"] == "custom"
-    loaded["conditions"]["custom"]["source"] = "pass"  # ↓
-    assert loaded["conditions"]["custom"]["source"] == "pass"
+    assert default_config.conditions["default"]["source"] == "$pass"
+    assert loaded["conditions"]["default"]["source"] == "$dummy"
+    assert loaded["conditions"]["custom"]["source"] == "$custom"
+    loaded["conditions"]["custom"]["source"] = "$pass"  # ↓
+    assert loaded["conditions"]["custom"]["source"] == "$pass"
     assert validate_config(loaded) == ([], [])
     #
     # Skip /settings/host and /templates/*/recipients warnings:
@@ -720,14 +720,14 @@ def test_validate_config():
     """).strip()
     # Expression expansion
     loaded = deepcopy(stem)
-    loaded.update({"expressions": {"custom": {"not": "fake"},
-                                   "foo": {"not": "bar"},
+    loaded.update({"expressions": {"custom": {"not": "$fake"},
+                                   "foo": {"not": "$bar"},
                                    "bar": {"has": "some needle"}}})
     warn, info = validate_config(loaded)
     assert not info
     assert "\n".join(warn) == dedent("""
         /expressions/custom changed while attempting to load config:
-          {'not': 'fake'} -> ValueError("Unknown reference: 'fake'")
+          {'not': '$fake'} -> ValueError("Unknown reference: '$fake'")
     """).strip()
     # Expression eval
     loaded = deepcopy(stem)
@@ -772,15 +772,16 @@ def test_validate_config():
     # Named expressions
     loaded = deepcopy(stem)
     loaded.update({"expressions": {"dummy": {"has": "foo"}},
-                   "conditions": {"custom": {"source": "pass",
-                                             "channel": "dummy",
-                                             "body": "fake"}}})
+                   "conditions": {"custom": {"source": "$pass",
+                                             "channel": "$dummy",
+                                             "body": "$fake"}}})
     warn, info = validate_config(loaded)
     assert warn == [
-        "/conditions/custom/body 'fake' not found in /expressions"
+        '/conditions/custom/body changed while attempting to load config:'
+        '\n  \'$fake\' -> ValueError("Unknown reference: \'$fake\'")'
     ]
     assert info == [
-        "/conditions/custom/source: 'pass' was dropped; reason: default"
+        "/conditions/custom/source: '$pass' was dropped; reason: default"
     ]
     # Scope members out-of-order
     loaded = deepcopy(stem)

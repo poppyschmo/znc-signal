@@ -106,10 +106,10 @@ default_config = config_NT(**{
             "x_policy": "filter",    # filter|first (i.e., and|or, all|any)
             "x_source": "hostmask",  # nick|hostmask (nick!ident@host)
             # named expressions
-            "network": "pass",       # "pass" -> /expressions/pass
-            "channel": "pass",       # skipped if context is N/A
-            "source": "pass",        # see x_source, above
-            "body": "drop"
+            "network": "$pass",       # "pass" -> /expressions/pass
+            "channel": "$pass",       # skipped if context is N/A
+            "source": "$pass",        # see x_source, above
+            "body": "$drop"
         }
     },
 })
@@ -355,6 +355,7 @@ def validate_config(loaded):
     ``construct_config``, which it actually calls, but only to report
     errors
     """
+    from .lexpresser import expand_subs, eval_boolish_json
     #
     # Solely to catch typos so desired items don't get dropped
     for k in loaded:
@@ -406,9 +407,8 @@ def validate_config(loaded):
     #
     if "expressions" in peeled:
         etable = dict(peeled["expressions"])
-        etable.setdefault("pass", default_config.expressions["pass"])
-        etable.setdefault("drop", default_config.expressions["drop"])
-        from .lexpresser import expand_subs, eval_boolish_json
+        for k, v in default_config.expressions.items():
+            etable.setdefault(k, v)
         for name, expr in peeled["expressions"].items():
             try:
                 _expr = expand_subs(expr, etable)
@@ -476,10 +476,15 @@ def validate_config(loaded):
                 warn.append(f"{pfx}/template {cond['template']!r} not found "
                             "in /templates")
             for eref in ("channel", "network", "source", "body"):
-                if (eref in cond and cond[eref] not in
-                        peeled.get("expressions", {}).keys() | {"pass", "drop"}):
-                    warn.append(f"{pfx}/{eref} {cond[eref]!r} not found in "
-                                "/expressions")
+                if eref not in cond:
+                    continue
+                etable = dict(peeled.get("expressions", {}))
+                for k, v in default_config.expressions.items():
+                    etable.setdefault(k, v)
+                try:
+                    eval_boolish_json(expand_subs(cond[eref], etable), "")
+                except Exception as exc:
+                    cond[eref] = exc
     #
     # Superfluous items (uncommented or misplaced defaults) are dropped by the
     # ``structed`` to ``peeled`` conversion above

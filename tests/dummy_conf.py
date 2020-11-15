@@ -51,14 +51,14 @@ json_conditions = """\
     "timeout_post": 360,
     "timeout_idle": 120,
     "x_source": "nick",
-    "body": "custom",
-    "source": "custom"
+    "body": "$custom",
+    "source": "$custom"
   },
   "default": {
     "replied_only": true,
     "timeout_push": 600,
-    "source": "dummy",
-    "network": "dummy"
+    "source": "$dummy",
+    "network": "$dummy"
   }
 }"""
 
@@ -87,12 +87,12 @@ peeled = {"settings": {"host": "example.com",
                                     "timeout_post": 360,
                                     "timeout_idle": 120,
                                     "x_source": "nick",
-                                    "body": "custom",
-                                    "source": "custom"},
+                                    "body": "$custom",
+                                    "source": "$custom"},
                          "default": {"replied_only": True,
                                      "timeout_push": 600,
-                                     "source": "dummy",
-                                     "network": "dummy"}}}
+                                     "source": "$dummy",
+                                     "network": "$dummy"}}}
 
 ini = """\
 [settings]
@@ -122,8 +122,8 @@ ini = """\
         timeout_post = 360
         timeout_idle = 120
         x_source = nick
-        source = custom
-        body = custom
+        source = $custom
+        body = $custom
     [default]
         #enabled = True
         #away_only = False
@@ -136,10 +136,10 @@ ini = """\
         #template = default
         #x_policy = filter
         #x_source = hostmask
-        network = dummy
-        #channel = pass
-        source = dummy
-        #body = drop
+        network = $dummy
+        #channel = $pass
+        source = $dummy
+        #body = $drop
 """
 
 ini_stub_expanded_expressions = """\

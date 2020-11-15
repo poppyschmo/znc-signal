@@ -11,19 +11,16 @@ APPROVE = True
 REJECT = FILTER = False
 
 
-def expressed(path, expr_key, string, expressions, cond_options):
+def expressed(path, maybe_expr, string, expressions, cond_options):
     from .lexpresser import expand_subs, eval_boolish_json
-    if expr_key not in expressions:
-        msg = ("{} refers to a nonexistent expression: {!r};"
-               "Disabling condition in loaded config")
-        try:
-            cond_options["enabled"] = False
-        except Exception:
-            pass
-        raise KeyError(msg.format(path, expr_key))
-    expr_val = expressions[expr_key]
-    expr = expand_subs(expr_val, expressions)
-    return eval_boolish_json(expr, string)
+    try:
+        expr = expand_subs(maybe_expr, expressions)
+        return eval_boolish_json(expr, string)
+    except Exception as exc:
+        cond_options["enabled"] = False
+        raise ValueError(
+            "Problem loading {path} {maybe_expr!r}; Disabling condition"
+        ) from exc
 
 
 def wreck_one(name, cond, data, config, debug):

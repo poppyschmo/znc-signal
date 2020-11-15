@@ -122,11 +122,15 @@ def expand_subs(node, table, _count=None):
         print("{}{lseen:<4}{nstr}{:{w}}{seen}"
               .format(".   " * level, "", lseen=level, nstr=nstr,
                       w=colw - len(nstr) - level * 4, seen=seen))
-    if isinstance(node, str) and node in table:
-        if node in seen:
-            raise RecursionError("An expression can't contain itself")
-        seen.append(node)
-        return expand_subs(table[node], table, (seen, level))
+    if isinstance(node, str):
+        if not node or node[0] != "$":
+            raise ValueError(f"Invalid reference: {node!r}")
+        if node[1:] in table:
+            if node[1:] in seen:
+                raise RecursionError("An expression can't contain itself")
+            seen.append(node[1:])
+            return expand_subs(table[node[1:]], table, (seen, level))
+        raise ValueError(f"Unknown reference: {node!r}")
     elif (isinstance(node, (MutableMapping, MappingProxyType)) and
           len(node) == 1):
         level += 1
@@ -141,7 +145,7 @@ def expand_subs(node, table, _count=None):
         if len(seen):
             seen.pop()
         return {key: value}
-    raise ValueError(f"Unknown reference: {node!r}")
+    raise ValueError(f"Cannot process node: {node!r}")
 
 
 def ppexp(exp, mes, file=None, indent=0):

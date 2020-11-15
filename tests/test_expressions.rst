@@ -160,12 +160,12 @@ NOT
 
 >>> table = {"spam": {"!has": "Green"},
 ...          "foo": {"has": "red"},
-...          "bar": {"any": ["foo", "spam",
+...          "bar": {"any": ["$foo", "$spam",
 ...                          {"has any": ["blue", "bar"]}]},
-...          "baz": {"not": {"all": ["bar", "spam"]}}
+...          "baz": {"not": {"all": ["$bar", "$spam"]}}
 ...         }
 
->>> test = {"any": ["baz", "foo"]}
+>>> test = {"any": ["$baz", "$foo"]}
 >>> expect = {
 ...     'any': [
 ...         {'not': {'all': [{'any': [{'has': 'red'},
@@ -175,38 +175,48 @@ NOT
 ...         {'has': 'red'}]
 ... }
 
+>>> expand_subs({"any": [{"has": "fake"}]}, table) == expect
+False
+
 >>> expand_subs.debug = True
 >>> expand_subs(test, table) == expect
 0   {'any': [...]}                          []
-.   1   'baz'                               []
+.   1   '$baz'                              []
 .   1   {'not': {...}}                      ['baz']
 .   .   2   {'all': [...]}                  ['baz']
-.   .   .   3   'bar'                       ['baz']
+.   .   .   3   '$bar'                      ['baz']
 .   .   .   3   {'any': [...]}              ['baz', 'bar']
-.   .   .   .   4   'foo'                   ['baz', 'bar']
+.   .   .   .   4   '$foo'                  ['baz', 'bar']
 .   .   .   .   4   {'has': 'red'}          ['baz', 'bar', 'foo']
-.   .   .   .   4   'spam'                  ['baz', 'bar']
+.   .   .   .   4   '$spam'                 ['baz', 'bar']
 .   .   .   .   4   {'!has': 'Green'}       ['baz', 'bar', 'spam']
 .   .   .   .   4   {'has any': [...]}      ['baz', 'bar']
-.   .   .   3   'spam'                      []
+.   .   .   3   '$spam'                     []
 .   .   .   3   {'!has': 'Green'}           ['spam']
-.   1   'foo'                               []
+.   1   '$foo'                              []
 .   1   {'has': 'red'}                      ['foo']
 True
 
->>> table["bar"]["any"][-1] = "baz"
+>>> table["bar"]["any"][-1] = "$baz"
 >>> expand_subs(test, table)
 Traceback (most recent call last):
 RecursionError: An expression can't contain itself
 
 >>> del table["bar"]["any"][-1]
->>> table["foo"] = {"not": "bar"}
+>>> table["foo"] = {"not": "$bar"}
 >>> expand_subs(test, table)
 Traceback (most recent call last):
 RecursionError: An expression can't contain itself
 
 >>> del expand_subs.debug
 
+>>> expand_subs({"any": ["$fake"]}, table)
+Traceback (most recent call last):
+ValueError: Unknown reference: '$fake'
+
+>>> expand_subs({"any": ["fake"]}, table)
+Traceback (most recent call last):
+ValueError: Invalid reference: 'fake'
 
 ``.ppexp``
 
