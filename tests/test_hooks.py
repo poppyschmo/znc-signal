@@ -74,6 +74,7 @@ rels = namedtuple("Rels",
 
 def test_reckon(signal_stub_debug):
     # Simulate converted dict passed to Signal.reckon()
+    from Signal.reckognize import reckon
     from collections import defaultdict
     defnul = defaultdict(type(None), rels.OnPrivTextMessage)
     assert defnul["channel"] is None
@@ -97,19 +98,19 @@ def test_reckon(signal_stub_debug):
     # future changes to options
     current_defaults = iter(sig.config.conditions["default"])
     #
-    assert sig.reckon(data) is True
+    assert reckon(sig.config, data, sig.debug) is True
     data_reck = data["reckoning"]
     assert data_reck == ["<default", "&>"]
     #
     assert next(current_defaults) == "enabled"
     sig.cmd_update("/conditions/default/enabled", "False")
-    assert sig.reckon(data) is False
+    assert reckon(sig.config, data, sig.debug) is False
     assert data_reck == ["<default", "enabled>"]
     sig.cmd_update("/conditions/default/enabled", remove=True)
     #
     assert next(current_defaults) == "away_only"
     sig.cmd_update("/conditions/default/away_only", "True")
-    assert sig.reckon(data) is False
+    assert reckon(sig.config, data, sig.debug) is False
     assert data_reck == ["<default", "away_only>"]
     sig.cmd_update("/conditions/default/away_only", remove=True)
     #
@@ -117,7 +118,7 @@ def test_reckon(signal_stub_debug):
     assert not conds["default"].maps[0]  # updated list is auto initialized
     sig.cmd_update("/conditions/default/scope/attached", remove=True)
     assert conds["default"]["scope"] == ["query", "detached"]
-    assert sig.reckon(data) is False
+    assert reckon(sig.config, data, sig.debug) is False
     assert data_reck == ["<default", "scope>"]
     sig.cmd_update("/conditions/default/scope", remove=True)
     #
@@ -127,7 +128,7 @@ def test_reckon(signal_stub_debug):
     assert next(current_defaults) == "max_clients"
     data["client_count"] = 2
     sig.cmd_update("/conditions/default/max_clients", "1")
-    assert sig.reckon(data) is False
+    assert reckon(sig.config, data, sig.debug) is False
     assert data_reck == ["<default", "max_clients>"]
     sig.cmd_update("/conditions/default/max_clients", remove=True)
     data["client_count"] = 1
@@ -176,17 +177,17 @@ def test_reckon(signal_stub_debug):
     sig.cmd_update("/conditions/custom/network", "custom")
     assert data["network"] == "testnet"
     assert sig.config.expressions["custom"] == {"has": "dummy"}
-    assert sig.reckon(data) is True
+    assert reckon(sig.config, data, sig.debug) is True
     assert data_reck == ["<custom", "!network>", "<default", "&>"]
     sig.cmd_update("/conditions/custom/network", "default")
     #
     # Channel
     current_defaults.remove("channel")
     sig.OnModCommand('update /conditions/custom/channel custom')
-    assert sig.reckon(data) is True
+    assert reckon(sig.config, data, sig.debug) is True
     assert data_reck == ["<custom", "!channel>", "<default", "&>"]
     sig.cmd_update("/expressions/custom/has", "test_chan")
-    assert sig.reckon(data) is True
+    assert reckon(sig.config, data, sig.debug) is True
     assert data_reck == ["<custom", "&>"]
     sig.cmd_update("/expressions/custom/has", "dummy")
     sig.cmd_update("/conditions/custom/channel", "default")
@@ -194,18 +195,18 @@ def test_reckon(signal_stub_debug):
     # Source
     current_defaults.remove("source")
     sig.OnModCommand('update /conditions/custom/source custom')
-    assert sig.reckon(data) is True
+    assert reckon(sig.config, data, sig.debug) is True
     assert data_reck == ["<custom", "!source>", "<default", "&>"]
     sig.OnModCommand('update /expressions/custom @@ {"wild": "*testbot*"}')
-    assert sig.reckon(data) is True
+    assert reckon(sig.config, data, sig.debug) is True
     assert data_reck == ["<custom", "&>"]
     current_defaults.remove("x_source")
     assert conds["custom"]["x_source"] == "hostmask"
     sig.cmd_update("/conditions/custom/x_source", "nick")
-    assert sig.reckon(data) is True
+    assert reckon(sig.config, data, sig.debug) is True
     assert data_reck == ["<custom", "!source>", "<default", "&>"]
     sig.OnModCommand('update /expressions/custom @@ {"eq": "tbo"}')
-    assert sig.reckon(data) is True
+    assert reckon(sig.config, data, sig.debug) is True
     assert data_reck == ["<custom", "&>"]
     sig.cmd_update("/conditions/custom/x_source", remove=True)
     sig.cmd_update("/conditions/custom/source", "default")
@@ -213,7 +214,7 @@ def test_reckon(signal_stub_debug):
     # Body
     current_defaults.remove("body")
     sig.cmd_update("/conditions/custom/body", "custom")
-    assert sig.reckon(data) is True
+    assert reckon(sig.config, data, sig.debug) is True
     assert data_reck == ["<custom", "!body>", "<default", "&>"]
     sig.OnModCommand('update /expressions/custom @@ {"has": "dummy"}')
     sig.cmd_update("/conditions/custom/body", "default")
@@ -221,21 +222,21 @@ def test_reckon(signal_stub_debug):
     # Change default condition to always fail
     sig.OnModCommand('update /expressions/default @@ {"!has": ""}')
     assert conds["custom"]["body"] == "default"
-    assert sig.reckon(data) is False
+    assert reckon(sig.config, data, sig.debug) is False
     assert data_reck == ["<custom", '!network>', "<default", '!network>']
     #
     # Change per-condition, collective expressions bias
     current_defaults.remove("x_policy")  # only governs expressions portion
     assert conds["custom"]["x_policy"] == "filter"
     sig.OnModCommand('update /conditions/default/x_policy first')
-    assert sig.reckon(data) is False
+    assert reckon(sig.config, data, sig.debug) is False
     assert data_reck == ["<custom", "|>", "<default", "|>"]  # Falls through
     #
     assert not current_defaults
     #
     # "FIRST" (short circuit) hit
     sig.OnModCommand('update /conditions/custom/body custom')
-    assert sig.reckon(data) is True
+    assert reckon(sig.config, data, sig.debug) is True
     assert data_reck == ["<custom", "body!>"]
     #
     sig.OnModCommand('update /conditions/onetime @@ {}')
@@ -254,7 +255,7 @@ def test_reckon(signal_stub_debug):
         Selected: /conditions =>
           {'onetime': {...}, 'custom': {...}, ...}
     """).strip()
-    assert sig.reckon(data) is True
+    assert reckon(sig.config, data, sig.debug) is True
     assert data_reck == ["<onetime", "|>", "<custom", "body!>"]
 
 

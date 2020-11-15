@@ -8,6 +8,8 @@ rm -f /etc/supervisord.d/*.conf
 [ "$DEBUG_SUPER" ] &&
     ln -s /usr/local/share/supervisord/*.conf /etc/supervisord.d
 
+[ -e /site.sh ] && sh /site.sh
+
 if [ $# -eq 0 ] && [ "${0##*/}" = interact ]; then
     set -- su -l -s /bin/sh signal-cli
 fi
