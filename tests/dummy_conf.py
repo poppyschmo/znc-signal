@@ -142,6 +142,53 @@ ini = """\
         #body = $drop
 """
 
+ini_no_default_cond = """\
+[settings]
+    host = example.com
+    port = 1024
+    obey = False
+    #authorized = []
+    auto_connect = True
+    #config_version = 0.3
+
+[expressions]
+    curnick = {"has": "dummy"}
+    #pass = {"has": ""}
+    #drop = {"! has": ""}
+
+[templates]
+    [default]
+        recipients = +12127365000
+        #format = {focus}{context}: [{nick}] {body}
+        #focus_char = U+1F517
+        length = 80
+
+[conditions]
+    [qwhos]
+        enabled = True
+        scope = query
+    [chans]
+        enabled = True
+        scope = detached attached
+        body = $curnick
+    [default]
+        #enabled = True
+        #away_only = False
+        #scope = query detached attached
+        #replied_only = False
+        #max_clients = 0
+        #timeout_post = 180
+        #timeout_push = 300
+        #timeout_idle = 0
+        #template = default
+        #x_policy = filter
+        #x_source = hostmask
+        #network = $pass
+        #channel = $pass
+        #source = $pass
+        #body = $drop
+"""
+
 ini_stub_expanded_expressions = """\
 [expressions]
     #pass = {"has": ""}

@@ -542,6 +542,15 @@ def test_gen_ini():
         dummy.ini_stub_custom_template
 
 
+def test_gen_ini_regression():
+    from Signal.configgers import construct_config, load_config
+    from Signal.iniquitous import gen_ini
+    #
+    loaded = load_config(dummy.ini_no_default_cond)
+    converted = construct_config(loaded)
+    gen_ini(converted)
+
+
 def test_construct_config():
     from Signal.configgers import construct_config, default_config
     null_cats = {}

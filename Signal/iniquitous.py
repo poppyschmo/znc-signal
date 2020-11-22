@@ -17,6 +17,7 @@ class IniParser(configparser.ConfigParser):
     helpers below.
     """
     from enum import Enum
+    _parent = None
     nested = None
     category = None
     write_items = Enum("WriteItems", "defaults section both")
@@ -148,7 +149,9 @@ class IniParser(configparser.ConfigParser):
 
     def write(self, fp, **kw):
         """See configparser.ConfigParser.write.__doc__"""
-        if self._sections and not self._defaults:
+        # Top-level sections must have defaults (optional when nested)
+        if (self._sections and not self._defaults and
+                not self._parent and "iter_items" not in kw):
             raise ValueError("Must have defaults")
         #
         iter_items = kw.get("iter_items", self.write_items["section"])
@@ -225,6 +228,7 @@ def gen_ini(config=None) -> str:
         parser[DS] = config_obj.backing["default"]
         #
         parser.nested = IniParser()
+        parser.nested._parent = parser
         parser.nested[DS] = config_obj.bake(peel=True).get("default", {})
         for name, data in config_obj.items():
             if name == "default":
