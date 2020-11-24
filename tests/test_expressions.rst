@@ -224,15 +224,28 @@ ValueError: Invalid reference: 'fake'
 
 ``.ppexp``
 
+>>> myexp =  {"any": [{"wild": "*ok*"},
+...                   {"not": {"wild": "*no*"}},
+...                   {"wild all": ["*y*", "*a*", "*n*"]}]}
+>>> notherexp = {"all": [myexp, {"! wild": "*fake*"}]}
+>>> ppexp(notherexp, "nokay")
+T   {'all': [...]}
+.   T   {'any': [...]}
+.   .   T   {'wild': '*ok*'}
+.   .   F   {'not': {'wild': '*no*'}}
+.   .   .   T   {'wild': '*no*'}
+.   .   T   {'wild all': ['*y*', '*a*', '*n*']}
+.   T   {'! wild': '*fake*'}
+
 >>> myexp =  {"any": [{"has": "ok"},
 ...                   {"not": {"has": "no"}},
-...                   {"has all": ["y", "a", "n"]}]}
+...                   {"has all": ["ay!", "hey", "m-n"]}]}
 >>> notherexp = {"all": [myexp, {"! has": "fake"}]}
->>> ppexp(notherexp, "nokay")
+>>> ppexp(notherexp, "no ok ay!hey m-n")
 T   {'all': [...]}
 .   T   {'any': [...]}
 .   .   T   {'has': 'ok'}
 .   .   F   {'not': {'has': 'no'}}
 .   .   .   T   {'has': 'no'}
-.   .   T   {'has all': ['y', 'a', 'n']}
+.   .   T   {'has all': ['ay!', 'hey', 'm-n']}
 .   T   {'! has': 'fake'}

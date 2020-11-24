@@ -1,8 +1,52 @@
 # This file is part of ZNC-Signal <https://github.com/poppyschmo/znc-signal>,
 # licensed under Apache 2.0 <http://www.apache.org/licenses/LICENSE-2.0>.
 
+import re
 from types import MappingProxyType
+from typing import Union, List
 from collections.abc import MutableMapping, MutableSequence
+from functools import lru_cache, cache
+
+bound_pat = re.compile("^(?P<left>\\W)?.*?(?P<right>\\W)?$")
+get_regex = cache(re.compile)
+
+
+@lru_cache
+def get_has_regex(value: Union[str, List[str]]) -> re.Pattern:
+    """Return a compiled regexp for a has keyword."""
+    vals = (value,) if isinstance(value, str) else value
+
+    normal = []
+    only_l = []
+    only_r = []
+    bothlr = []
+    for v in vals:
+        if not v:
+            continue
+        m = bound_pat.match(v)
+        left, right = m.groups()
+        if left and right:
+            bothlr.append(v)
+        elif left:
+            only_l.append(v)
+        elif right:
+            only_r.append(v)
+        else:
+            normal.append(v)
+    final = []
+    if normal:
+        pat = "|".join(re.escape(v) for v in normal)
+        final.append(f"\\b(?:{pat})\\b")
+    if only_l:
+        pat = "|".join(re.escape(v) for v in only_l)
+        final.append(f"(?:{pat})\\b")
+    if only_r:
+        pat = "|".join(re.escape(v) for v in only_r)
+        final.append(f"\\b(?:{pat})")
+    if bothlr:
+        pat = "|".join(re.escape(v) for v in bothlr)
+        final.append(f"(?:{pat})")
+    return re.compile("|".join(final))
 
 
 def eval_boolish_json(expression, message):
@@ -33,12 +77,14 @@ def eval_boolish_json(expression, message):
     4. NOT doesn't undo I (you need separate branches)
 
     Notes on values:
+    0. Has (most useful) matches tokens delimited by word boundaries
+       or non-word characters already bounding the needle value.
     1. WILD uses Unix shell-style filename matching, see:
        <https://docs.python.org/3.6/library/fnmatch.html>
        Gnu-extension features likely don't work; see fnmatch(3)
     2. Regex matching uses Python's re.search, which resembles
-       PCRE. Clients may handle "\t\b", etc., differently. The
-       debug_exp command may reveal this: e.g., "\b" -> "\x08".
+       PCRE. Clients may handle "\t\\b", etc., differently. The
+       debug_exp command may reveal this: e.g., "\\b" -> "\x08".
     """
 
     def do_feed(expression, icase=False):
@@ -82,11 +128,12 @@ def eval_boolish_json(expression, message):
             return any(do_feed(c, icase) for c in value)
         elif op.startswith("has"):
             if op.endswith("all"):
-                return all(ic(s) in msg for s in value)
+                return all(get_has_regex(ic(s)).search(msg) for s in value)
             elif op.endswith("any"):
-                return any(ic(s) in msg for s in value)
+                pat = get_has_regex(ic(s) for s in value)
+                return bool(pat.search(msg))
             else:
-                return ic(value) in msg
+                return bool(get_has_regex(ic(value)).search(msg))
         elif op.startswith("wild"):
             from fnmatch import fnmatch
             if op.endswith("all"):
@@ -96,8 +143,7 @@ def eval_boolish_json(expression, message):
             else:
                 return fnmatch(msg, ic(value))
         elif op == "re":
-            from re import search
-            return search(ic(value), msg) is not None
+            return bool(get_regex(ic(value)).search(msg))
         elif op == "eq":
             return value == message  # disallow (i)
         else:

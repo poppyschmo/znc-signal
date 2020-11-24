@@ -1150,7 +1150,7 @@ class Signal(znc.Module):
         elif (hasattr(self, "_connection") and
                 not self._connection.IsClosed() and
                 self._connection.bus_addr == bus_addr):
-            self.put_pretty("Already connected to %r" % bus_addr)
+            self.put_pretty(f"Already connected to {bus_addr}")
             return
         issuer = self.GetClient().GetFullName()
         self._connection = self.CreateSocket(DBusConnection, bus_addr=bus_addr,
