@@ -21,8 +21,8 @@ import znc  # noqa: F401
 
 from pathlib import Path
 
-if sys.version_info < (3, 6):
-    raise RuntimeError("This module requires Python 3.6+")
+if sys.version_info < (3, 8):
+    raise RuntimeError("This module requires Python 3.8+")
 
 jeepney_lib_path = (Path(__file__).parent / "lib/jeepney").resolve(True)
 sys.path = [str(jeepney_lib_path)] + [p for p in sys.path if
