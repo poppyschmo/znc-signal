@@ -1148,6 +1148,7 @@ class Signal(znc.Module):
         elif self._connection.IsClosed():
             if self.debug:
                 self.logger.debug("Removed latent connection object")
+            self.put_pretty("Connection already closed, now also removed")
             self._connection = None
             return
 

@@ -121,6 +121,7 @@ class DBusConnection(znc.Socket):
         self._filters = MessageFilters()
         self._replies = ReplyMatcher()
         self._gennies = []
+        self.DisableReadLine()  # We are bytes oriented
 
     def _run(self, generator: Generator) -> Any:
         self._gennies.append(generator)
@@ -470,6 +471,7 @@ class DBusConnection(znc.Socket):
         return FilterHandle(self._filters, rule, queue)
 
     def OnConnected(self):
+        assert not self.HasReadLine()
         self.WriteBytes(self.auth_parser.data_to_send())
         self.put_issuer("Connected to: %s:%s" % self.bus_addr)
         self.SetSockName("DBus proxy to signal server")
