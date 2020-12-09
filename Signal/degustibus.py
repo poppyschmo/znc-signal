@@ -18,7 +18,31 @@ from jeepney.io.common import (  # type: ignore[import]
     MessageFilters, FilterHandle,
 )
 
-from typing import Tuple, Optional
+from typing import Tuple, Optional, Callable, Iterable
+
+
+def send_dbus_message(
+    connection: znc.Socket,
+    node: str,
+    method: str,
+    callback: Callable,
+    args: Optional[Iterable[str]] = None,
+) -> None:
+    """Send a DBus message."""
+    service = get_msggen(node)
+    args = args or ()
+    # Stands apart because called on other objects
+    if method == "Introspect":
+        from jeepney.wrappers import Introspectable  # type: ignore[import]
+        service = Introspectable(
+            object_path=service.object_path,
+            bus_name=service.bus_name,
+        )
+    proxy = OldProxy(service, connection)
+    try:
+        getattr(proxy, method)(*args).add_done_callback(callback)
+    except AttributeError:
+        raise ValueError("Method %r not found" % method)
 
 
 class DBusConnection(znc.Socket):
@@ -104,6 +128,10 @@ class DBusConnection(znc.Socket):
                                      path=service.object_path,
                                      interface=service.interface,
                                      member=member)
+
+    _send = send_dbus_message
+
+    _send = dbus_send
 
     def subscribe_incoming(self):
         """Register handler for incoming Signal messages"""

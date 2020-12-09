@@ -724,21 +724,7 @@ class Signal(znc.Module):
                     org.freedesktop.DBus.Debug.Stats.GetAllMatchRules
 
         """
-        #
-        from .jeepers import get_msggen
-        service = get_msggen(node)
-        args = args or ()
-        from .degustibus import OldProxy
-        # Stands apart because called on other objects
-        if method == "Introspect":
-            from jeepney.wrappers import Introspectable  # type: ignore[import]
-            service = Introspectable(object_path=service.object_path,
-                                     bus_name=service.bus_name)
-        proxy = OldProxy(service, self._connection)
-        try:
-            getattr(proxy, method)(*args).add_done_callback(callback)
-        except AttributeError:
-            raise ValueError("Method %r not found" % method)
+        self._connection._send(node, method, callback, args)
 
     def manage_config(self, action=None, peel=False, force=False,
                       as_json=False, path=None):
