@@ -201,11 +201,13 @@ class Signal(znc.Module):
             recipients = template["recipients"]
         #
         def callback(result, message):  # noqa: E306
-            if isinstance(result, int) and (1500000000 < result < 3000000000):
+            if isinstance(result, int) and (
+                1500000000000 < result < 3000000000000
+            ):
                 if len(message) > 52:
                     message = "{}...".format(message[:49])
                 import datetime
-                ts = datetime.datetime.fromtimestamp(result)
+                ts = datetime.datetime.fromtimestamp(result / 1000)
                 msg = "[{!s}] SENT: {!r}".format(ts, message)
             else:
                 info = dict(message=message, result=result)
@@ -657,7 +659,7 @@ class Signal(znc.Module):
             assert self._connection.unique_name is not None, "Not connected"
         except AttributeError as exc:
             raise AssertionError from exc
-        from jeepney.bus_messages import MatchRule
+        from jeepney.bus_messages import MatchRule  # type: ignore[import]
         from .jeepers import get_msggen
         service = get_msggen(node)
         match_rule = MatchRule(type="signal",
@@ -726,13 +728,13 @@ class Signal(znc.Module):
         from .jeepers import get_msggen
         service = get_msggen(node)
         args = args or ()
-        from jeepney.integrate.asyncio import Proxy
+        from .degustibus import OldProxy
         # Stands apart because called on other objects
         if method == "Introspect":
-            from jeepney.wrappers import Introspectable as IntrospectableMG
-            service = IntrospectableMG(object_path=service.object_path,
-                                       bus_name=service.bus_name)
-        proxy = Proxy(service, self._connection)
+            from jeepney.wrappers import Introspectable  # type: ignore[import]
+            service = Introspectable(object_path=service.object_path,
+                                     bus_name=service.bus_name)
+        proxy = OldProxy(service, self._connection)
         try:
             getattr(proxy, method)(*args).add_done_callback(callback)
         except AttributeError:
@@ -875,7 +877,7 @@ class Signal(znc.Module):
             warn, info = validate_config(peeled)
             msg = []
             if skip_dropped:
-                info = [l for l in info if "dropped" not in l]
+                info = [li for li in info if "dropped" not in li]
             if info:
                 msg += ["\x02FYI:\x02\n"] + info
             if warn:
@@ -974,8 +976,9 @@ class Signal(znc.Module):
             else:
                 indent = " " * (len(reminder) + 1)
                 first, *lines = formatted.splitlines()
-                formatted = "\n".join((f"{reminder} {first}",
-                                       *(f"{indent}{l}" for l in lines)))
+                formatted = "\n".join(
+                    (f"{reminder} {first}", *(f"{indent}{li}" for li in lines))
+                )
         self.put_pretty(formatted)
 
     def cmd_update(self, path=None, value=None, remove=False, as_json=False,
@@ -1366,7 +1369,7 @@ class Signal(znc.Module):
                 rest = (parser.format_usage()
                         .replace(upre, "", 1)
                         .replace("[-h] ", "", 1))
-                desc = [l.strip() for l in rest.split("\n") if l.strip()]
+                desc = [li.strip() for li in rest.split("\n") if li.strip()]
             else:
                 desc = [parser.description]
             for line, comm in zip_longest(desc, (command,), fillvalue=""):

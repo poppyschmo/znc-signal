@@ -3,18 +3,22 @@
 
 from . import znc
 from . import get_logger
-from .jeepers import incoming_NT, get_msggen
+from .jeepers import Incoming, get_msggen
 
-from asyncio.events import AbstractEventLoop
 from asyncio.base_events import BaseEventLoop
 from asyncio.futures import Future as AsyncFuture
 
-from jeepney.auth import (SASLParser, BEGIN,
-                          make_auth_anonymous, make_auth_external)
-from jeepney.bus import parse_addresses
-from jeepney.low_level import Parser
-from jeepney.routing import Router
-from jeepney.integrate.asyncio import Proxy
+from jeepney import MessageType  # type: ignore[import]
+
+from jeepney.auth import (  # type: ignore[import]
+    Authenticator, ClientState, make_auth_anonymous,
+)
+from jeepney.bus import parse_addresses  # type: ignore[import]
+from jeepney.low_level import Parser  # type: ignore[import]
+from jeepney.routing import Router  # type: ignore[import]
+from jeepney.integrate.asyncio import Proxy  # type: ignore[import]
+
+from typing import Tuple
 
 
 class DBusConnection(znc.Socket):
@@ -34,28 +38,29 @@ class DBusConnection(znc.Socket):
         self.__dict__.update(kwargs)
         self.unique_name = None
         #
-        self.auth_parser = SASLParserAnonAuth()
+        self.auth_parser = AnonAuthenticator(self.debug)
         self.parser = Parser()
         #
         FakeFuture.fake_loop = FakeLoop(self.module)
-        self.router = Router(FakeFuture)
         #
-        if self.debug:
-            from jeepney.low_level import HeaderFields
+        self.router = Router(
+            handle_factory=FakeFuture,
+            on_unhandled=self.on_unhandled if self.debug else None,
+        )
 
-            def on_unhandled(msg):
-                member = msg.header.fields[HeaderFields.member]
-                if member == "NameAcquired":
-                    # This fires before the "Hello" reply callback
-                    log_msg = f"Received routine opening signal: {member!r}; "
-                else:
-                    log_msg = "See 'data_received' entry above for contents"
-                self.logger.debug(log_msg)
-
-            self.router.on_unhandled = on_unhandled
         self.authentication = FakeFuture()
         # FIXME explain why this appears twice (see above)
         self.unique_name = None
+
+    def on_unhandled(self, msg):
+        from jeepney.low_level import HeaderFields
+        member = msg.header.fields[HeaderFields.member]
+        if member == "NameAcquired":
+            # This fires before the "Hello" reply callback
+            log_msg = f"Received routine opening signal: {member!r}; "
+        else:
+            log_msg = "See 'data_received' entry above for contents"
+        self.logger.debug(log_msg)
 
     def check_subscription(self, service_name=None, member=None):
         """Check if a 'signal-received' callback has been registered
@@ -113,7 +118,12 @@ class DBusConnection(znc.Socket):
             if self.debug:
                 assert isinstance(msg_body, tuple)
             try:
-                self.module.handle_incoming(incoming_NT(*msg_body))
+                incoming = Incoming(*msg_body)
+                if not incoming.message:
+                    if self.debug:
+                        self.logger.debug("msg_body: %r", incoming)
+                    return
+                self.module.handle_incoming(incoming)
             except Exception:
                 self.module.print_traceback()
         #
@@ -170,7 +180,8 @@ class DBusConnection(znc.Socket):
         #
         def name_has_owner_cb(result):  # noqa: E306
             if self.debug:
-                assert type(result) is int
+                msg = "name_has_owner_cb: {!s}({!r})"
+                self.logger.debug(msg.format(type(result), result))
             if result:
                 self.subscribe_incoming()
             else:
@@ -183,7 +194,7 @@ class DBusConnection(znc.Socket):
                             args=(service_name,))
 
     def _open_session(self):
-        bus = Proxy(get_msggen("DBus"), self)
+        bus = OldProxy(get_msggen("DBus"), self)
         hello_reply = bus.Hello()
 
         def hello_cb(fut):
@@ -200,7 +211,9 @@ class DBusConnection(znc.Socket):
         hello_reply.add_done_callback(hello_cb)
 
     def _authenticated(self):
-        self.WriteBytes(BEGIN)
+        assert self.auth_parser.data_to_send() is None
+        # Off by one, it seems (data_to_send() already inhbited by done flag)
+        self.WriteBytes(self.auth_parser._to_send)
         self.authentication.set_result(True)
         self.data_received = self.data_received_post_auth
         self.data_received(self.auth_parser.buffer)
@@ -209,6 +222,8 @@ class DBusConnection(znc.Socket):
         self._open_session()
 
     def data_received(self, data):
+        if self.debug:
+            self.logger.debug("Feeding auth: {!r}".format(data))
         self.auth_parser.feed(data)
         if self.auth_parser.authenticated:
             self._authenticated()
@@ -216,12 +231,11 @@ class DBusConnection(znc.Socket):
             self.authentication.set_exception(
                 ValueError(self.auth_parser.error)
             )
-        elif self.auth_parser.rejected is not None:
-            if b"ANONYMOUS" in self.auth_parser.rejected:
-                self.WriteBytes(make_auth_anonymous())
-                self.auth_parser.rejected = None
-            else:
-                self.auth_parser.error = self.auth_parser.rejected
+        else:
+            out = self.auth_parser.data_to_send()
+            if self.debug:
+                self.logger.debug("Sending auth: {!r}".format(out))
+            self.WriteBytes(out)
 
     def format_debug_msg(self, msg):
         from .ootil import OrderedPrettyPrinter as OrdPP
@@ -270,7 +284,7 @@ class DBusConnection(znc.Socket):
         return future
 
     def OnConnected(self):
-        self.WriteBytes(b'\0' + make_auth_external())
+        self.WriteBytes(self.auth_parser.data_to_send())
         self.put_issuer("Connected to: %s:%s" % self.bus_addr)
         self.SetSockName("DBus proxy to signal server")
         self.SetTimeout(0)
@@ -293,28 +307,27 @@ class DBusConnection(znc.Socket):
                     raise
 
 
-class SASLParserAnonAuth(SASLParser):
-    def __init__(self):
-        super().__init__()
-        self.rejected = None
+class AnonAuthenticator(Authenticator):
+    state: ClientState
 
-    def process_line(self, line):
-        self.rejected = None
-        if line.startswith(b"REJECTED"):
-            self.rejected = line
-        else:
-            super().process_line(line)
+    def __init__(self, debug: bool, enable_fds=False):
+        super().__init__(enable_fds)
+        self.debug = debug
+        self.logger = get_logger(self.__class__.__name__)
 
-    def feed(self, data):
-        self.buffer += data
-        while ((b'\r\n' in self.buffer)
-               and not self.authenticated
-               and self.rejected is None):
-            line, self.buffer = self.buffer.split(b'\r\n', 1)
-            self.process_line(line)
+    def process_line(self, line: bytes) -> Tuple[bytes, ClientState]:
+        if self.debug:
+            self.logger.debug("line: {!r}".format(line))
+        if self.state is ClientState.WaitingForReject:
+            self.state = ClientState.WaitingForOk
+        elif line.startswith(b"REJECTED"):
+            if b"ANONYMOUS" in line:
+                return make_auth_anonymous(), ClientState.WaitingForReject
+            self.error = line
+        return super().process_line(line)
 
 
-class FakeLoop(AbstractEventLoop):
+class FakeLoop(BaseEventLoop):
     """Kludge for DBusConnection's incoming data dispatcher (router)
 
     Obviously, this is pure mockery and not a real shim.
@@ -324,6 +337,7 @@ class FakeLoop(AbstractEventLoop):
 
     def __init__(self, module):
         self.module = module
+        super().__init__()
 
     def call_soon(self, callback, *args, context=None):
         return self.call_later(0, callback, *args, context=context)
@@ -336,8 +350,6 @@ class FakeLoop(AbstractEventLoop):
     def get_debug(self):
         return False
 
-    call_exception_handler = BaseEventLoop.default_exception_handler
-
 
 class FakeFuture(AsyncFuture):
     fake_loop = None
@@ -345,6 +357,18 @@ class FakeFuture(AsyncFuture):
     def __init__(self):
         assert self.fake_loop is not None
         super().__init__(loop=self.fake_loop)
+
+
+class OldProxy(Proxy):
+    _protocol: DBusConnection
+
+    def _method_call(self, make_msg):
+        def inner(*args, **kwargs):
+            msg = make_msg(*args, **kwargs)
+            assert msg.header.message_type is MessageType.method_call
+            return self._protocol.send_message(msg)
+
+        return inner
 
 
 def get_tcp_address(addr):

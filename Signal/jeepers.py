@@ -7,13 +7,13 @@ Miscellaneous objects for the DBus connection
 # XXX shocking/sad didn't grok static typing at all back whenever this file was
 # last touched. Too scared to look. Too lazy to fix.
 
-from jeepney.wrappers import MessageGenerator, new_method_call  # noqa E402
+from jeepney.wrappers import MessageGenerator, new_method_call  # type: ignore[import]  # noqa: E501
 from typing import List, Union
 from collections import namedtuple
 
 
-incoming_NT = namedtuple("Incoming",
-                         "timestamp source groupID message attachments")
+Incoming = namedtuple("Incoming",
+                      "timestamp source groupID message attachments")
 
 
 class SignalMG(MessageGenerator):
@@ -74,10 +74,10 @@ def get_msggen(name):
     if name == "Signal":
         mg = signal_service
     elif name == "DBus":
-        from jeepney.bus_messages import message_bus
+        from jeepney.bus_messages import message_bus  # type: ignore[import]
         mg = message_bus
     elif name in ("Stats", "Monitoring"):
-        import jeepney.bus_messages as bm
+        import jeepney.bus_messages as bm  # type: ignore[import]
         mg = getattr(bm, name)()
     else:
         raise ValueError("Unable to determine target object")
