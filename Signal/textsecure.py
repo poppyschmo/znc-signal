@@ -377,9 +377,10 @@ class Signal(znc.Module):
                 msg.append("\x02Warning: DEBUG mode is useless without LOGFILE"
                            "; setting to %r, but will not rotate/truncate; "
                            "Consider a pty instead\x02" % self.logfile)
-            get_logger.LOGFILE = open(self.logfile, "w")
+            get_logger.configure(open(self.logfile, "w"))
         self.logger = get_logger(self.__class__.__name__)
-        self.logger.setLevel("DEBUG" if self.debug else "WARNING")
+        if not self.debug:
+            self.logger.setLevel("WARNING")
         # This and the logger call in OnShutdown are the only unguarded ones
         self.logger.debug("loaded, logging with: %r" % self.logger)
         #

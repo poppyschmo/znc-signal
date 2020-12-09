@@ -50,6 +50,12 @@ ordered_reprlib._possibly_sorted = _possibly_sorted
 OrderedRepr = ordered_reprlib.Repr
 
 
+_logger_fmt = (
+    "{dark}[%(asctime)s]{norm} {dim}%(name)s.%(funcName)s:{norm} %(message)s"
+)
+
+
+# FIXME wtf is all this nonsense? honestly.
 class GetLogger:
     """Attach a single, common handler to the default logger
 
@@ -59,40 +65,30 @@ class GetLogger:
     """
     LEVEL = "DEBUG"
     LOGFILE = None
-    LOOP = None
-    HANDLER_NAME_FMT = "{name} (DEBUG)"
-    HANDLER_NAME = None
-    FORMAT = ("{dark}[%(asctime)s]{norm} {dim}%(name)s"
-              ".%(funcName)s:{norm} %(message)s")
-    names = None
+    handler_name_fmt = "{name} (DEBUG)"
+    handler_name = None
+    _escapes = {
+        "dark": "\x1b[38;5;241m",
+        "dim": "\x1b[38;5;247m",
+        "norm": "\x1b[m",
+    }
 
     def __init__(self, level=None, logfile=None, handler_name=None, loop=None):
         self.LOGFILE = logfile
-        self.LOOP = loop
         self.LEVEL = level or self.LEVEL
-        self.HANDLER_NAME = handler_name
-        self._handler = self._formatter = None
-        self.names = []  # list instead of set, so dupes can be detected
+        self.handler_name = handler_name
+        self._handler = None
+        self._formatter = None
 
-    @property
-    def escapes(self):
-        # Assume 256-color term w. dark bg (v-console shouldn't explode)
-        if self.LOGFILE and self.LOGFILE.isatty():
-            return dict(dark="\x1b[38;5;241m",
-                        dim="\x1b[38;5;247m",
-                        norm="\x1b[m")
-        else:
-            return dict(dark="", dim="", norm="")
-
-    @property
-    def formatter(self):
+    def get_formatter(self):
         if self._formatter is not None:
             return self._formatter
-        self._formatter = logging.Formatter(self.FORMAT.format(**self.escapes))
+        tty = self.LOGFILE and self.LOGFILE.isatty()
+        escapes = self._escapes if tty else dict(dark="", dim="", norm="")
+        self._formatter = logging.Formatter(_logger_fmt.format(**escapes))
         return self._formatter
 
-    @property
-    def handler(self):
+    def get_handler(self):
         if self._handler is not None:
             self.block_till_ready()
             return self._handler
@@ -102,11 +98,30 @@ class GetLogger:
             self.LOGFILE.close()
             self._handler = logging.FileHandler(self.LOGFILE.name)
             self.LOGFILE = self._handler.stream
-        self._handler.set_name(self.HANDLER_NAME)
-        self._handler.setLevel(self.LEVEL)
-        self._handler.setFormatter(self.formatter)
+        self._handler.set_name(self.handler_name)
+        # self._handler.setLevel(self.LEVEL)
+        self._handler.setFormatter(self.get_formatter())
         self.block_till_ready()
         return self._handler
+
+    def configure(self, file, level=None):
+        self.LOGFILE = file
+        if level is not None:
+            if isinstance(level, int):
+                level = logging.getLevelName(level)
+            assert hasattr(logging, level)
+        else:
+            level = self.LEVEL
+
+        self.handler_name = self.handler_name_fmt.format(
+            name=self.LOGFILE.name
+        )
+
+        logging.root.handlers.clear()
+        logging.basicConfig(
+            level=level,
+            handlers=[self.get_handler()]
+        )
 
     def __call__(self, name, level=None):
         """Return the default logger
@@ -114,75 +129,26 @@ class GetLogger:
         This should only be called if ``logging.getLogger`` isn't doing
         the right thing.
         """
-        #
-        logger = logging.getLogger(name)
-        #
-        if self.LOGFILE is None or name in self.names:
-            return logger
-        #
-        handler_name = self.HANDLER_NAME_FMT.format(name=self.LOGFILE.name)
-        if self.HANDLER_NAME:
-            if self.HANDLER_NAME != handler_name:
-                raise RuntimeError("This only supports a single handler.")
-        else:
-            self.HANDLER_NAME = handler_name
-        #
-        self.names.append(name)
-        #
-        if any(h.name == handler_name for h in logger.handlers):
-            return logger
-        #
-        if name == "asyncio":
-            loop = self.LOOP
-            if loop is None:
-                from asyncio import get_event_loop
-                loop = get_event_loop()
-            loop.set_debug(1)
-            logging.captureWarnings(True)
-        #
-        if level is not None:
-            if isinstance(level, int):
-                level = logging.getLevelName(level)
-            assert hasattr(logging, level)
-        else:
-            level = self.LEVEL
-        #
-        logger.addHandler(self.handler)
-        logger.setLevel(level)  # str or int
-        return logger
+        return logging.getLogger(name)
 
+    # FIXME remove this at call sites
     def clear(self):
-        """Sequence to close handler and remove local reference
-
-        This enables the logfile to be changed between reloads but
-        copies of the old one may still be open elsewhere.
-
-        ``logging.shutdown()`` is registered with ``atexit`` on import,
-        but running those callbacks would mess with all other modules
-        using logging.
-        """
-        #
-        if not self.names or not self.HANDLER_NAME:
+        """Sequence to close handler and remove local reference"""
+        if not self.handler_name:
             return
         logging._acquireLock()
         try:
-            for name in self.names[:]:
-                logger = logging.getLogger(name)
-                # Can't use logging.shutdown; it wants a list of weakrefs
-                assert self._handler in logger.handlers
-                logger.removeHandler(self._handler)
-                self.names.remove(name)
-                del logger.manager.loggerDict[name]
-            if isinstance(self._handler, logging.FileHandler):
+            logging.root.handlers.clear()
+            if not self._handler:
+                pass
+            elif isinstance(self._handler, logging.FileHandler):
                 self._handler.close()
-            else:
+            elif hasattr(self._handler, "stream"):
                 if hasattr(self._handler.stream, "flush"):
                     self._handler.stream.flush()
                 self._handler.stream.close()
             if not self.LOGFILE.closed:
                 raise RuntimeError(f"Could not close {self.LOGFILE}")
-            if self.names:
-                raise Warning(f"Unknown loggers found: {self.names}")
             self.__init__()
         finally:
             logging._releaseLock()
