@@ -65,6 +65,10 @@ class Future(_Future):
         self._callbacks.append((fn, context))
 
 
+# The new Jeepney 0.5 API inverts the router/connection relationship for
+# asyncio code. There is also a hybrid scheme in the blocking variant. Since we
+# don't have a means of blocking while waiting for IO, this uses generators to
+# mimic the latter.
 class DBusConnection(znc.Socket):
     """Connection to the Signal host's message bus
 
@@ -265,7 +269,6 @@ class DBusConnection(znc.Socket):
            #bus-messages-name-owner-changed
         """
         service_name = get_msggen("Signal").bus_name
-        member = "NameOwnerChanged"
         #
         def watch_name_acquired_cb(msg_body):  # noqa: E306
             if self.debug:
@@ -273,22 +276,29 @@ class DBusConnection(znc.Socket):
                 assert len(msg_body) == 3
                 assert all(type(s) is str for s in msg_body)
             if msg_body[0] == service_name:
-                self.remove_subscription("DBus", member)
+                self.remove_subscription("DBus", "NameOwnerChanged")
                 self._subscribe(
-                    "DBus", member, remove_name_owner_changed_cb, remove=True
+                    "DBus",
+                    "NameOwnerChanged",
+                    remove_name_owner_changed_cb,
+                    remove=True
                 )
         #
         def remove_name_owner_changed_cb():  # noqa: E306
             if self.debug:
-                self.logger.debug("Cancelled subscription for "
-                                  f"{member} on 'DBus'")
+                self.logger.debug(
+                    "Cancelled subscription for NameOwnerChanged on iface DBus"
+                )
             self.subscribe_incoming()
         #
         def add_name_owner_changed_cb():  # noqa: E306
             if self.debug:
-                self.logger.debug("Registering signal callback for "
-                                  f"{member} on 'DBus'")
-            self.add_subscription("DBus", member, watch_name_acquired_cb)
+                self.logger.debug(
+                    "Registering signal cb for NameOwnerChanged on iface DBus"
+                )
+            self.add_subscription(
+                "DBus", "NameOwnerChanged", watch_name_acquired_cb
+            )
         #
         def name_has_owner_cb(result):  # noqa: E306
             if self.debug:
@@ -298,7 +308,9 @@ class DBusConnection(znc.Socket):
                 self.subscribe_incoming()
             else:
                 self.put_issuer("Waiting for Signal service...")
-                self._subscribe("DBus", member, add_name_owner_changed_cb)
+                self._subscribe(
+                    "DBus", "NameOwnerChanged", add_name_owner_changed_cb
+                )
         #
         wrapped = self.module.make_generic_callback(name_has_owner_cb)
         self._send("DBus", "NameHasOwner", wrapped, args=(service_name,))
