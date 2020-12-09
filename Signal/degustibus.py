@@ -19,7 +19,7 @@ from jeepney.io.common import (  # type: ignore[import]
 )
 from jeepney.bus_messages import MatchRule  # type: ignore[import]
 
-from typing import Tuple, Optional, Callable, Iterable
+from typing import Tuple, Optional, Callable, Iterable, Any
 
 
 def send_dbus_message(
@@ -44,6 +44,25 @@ def send_dbus_message(
         getattr(proxy, method)(*args).add_done_callback(callback)
     except AttributeError:
         raise ValueError("Method %r not found" % method)
+
+
+default_subs = (("DBus", "NameOwnerChanged"), ("Signal", "MessageReceived"))
+
+
+class FakeFuture(_Future):
+
+    def __init__(self):
+        super().__init__()
+        self._callbacks = []
+
+    def set_result(self, result):
+        self._result = (True, result)
+        for callback, _ in self._callbacks:
+            callback(self)
+        self._callbacks.clear()
+
+    def add_done_callback(self, fn, *, context=None):
+        self._callbacks.append((fn, context))
 
 
 class DBusConnection(znc.Socket):
@@ -102,7 +121,11 @@ class DBusConnection(znc.Socket):
             key = (service.object_path, service.interface)
             return any(k[:-1] == key for k in self.router.signal_callbacks)
 
-    def remove_subscription(self, service_name=None, member=None):
+    def remove_subscription(
+        self,
+        service_name: Optional[str] = None,
+        member: Optional[str] = None
+    ):
         """Remove a 'signal-received' callback
 
         Without ``member``, remove all subscriptions registered to
@@ -117,9 +140,8 @@ class DBusConnection(znc.Socket):
             if key in self.router.signal_callbacks:
                 del self.router.signal_callbacks[key]
         else:
-            key = (service.object_path, service.interface)
             for k in tuple(self.router.signal_callbacks):
-                if k[:-1] == key:
+                if k[:-1] == (service.object_path, service.interface):
                     del self.router.signal_callbacks[k]
 
     def add_subscription(self, service_name, member, callback):
@@ -131,6 +153,20 @@ class DBusConnection(znc.Socket):
                                      member=member)
 
     _send = send_dbus_message
+
+    def _ensure_subscription_result(self, result: Any, **kwargs: Any) -> None:
+        msg = []
+        if result != ():
+            msg.append("Problem with subscription request")
+        elif self.IsClosed():
+            msg.append("Connection unexpectedly closed")
+        if msg:
+            msg.extend((f"{k}: {v}" for k, v in kwargs.items()))
+            try:
+                raise RuntimeError("; ".join(msg))
+            except RuntimeError:
+                self.module.print_traceback()
+        return None
 
     def _subscribe(
         self,
@@ -153,31 +189,33 @@ class DBusConnection(znc.Socket):
             member=member,
             path=service.object_path
         )
-        #
+
         def request_cb(fut):  # noqa E306
-            result = fut.result()
-            msg = []
-            if result != ():
-                msg.append("Problem with subscription request")
-            elif not hasattr(self.module, "_connection"):
-                msg.append("Connection missing")
-            elif self.IsClosed():
-                msg.append("Connection unexpectedly closed")
-            if msg:
-                msg.extend([f"remove: {remove!r}",
-                            f"member: {member!r}",
-                            f"result: {result!r}"])
-                try:
-                    raise RuntimeError("; ".join(msg))
-                except RuntimeError:
-                    self.module.print_traceback()
-                return None
-            # Confusing: see _disconnect below for reason (callback hell)
-            if callable(callback):
+            self._ensure_subscription_result(fut.result())
+            if callback:
                 return callback()
-        #
+
         method = "AddMatch" if remove is False else "RemoveMatch"
         self._send("DBus", method, request_cb, args=[match_rule])
+
+    def _cancel_subscriptions(
+        self, callback: Callable[[], None], pairs=default_subs
+    ) -> None:
+        # It seems like the system bus normally removes match rules when their
+        # owner disconnects, so this is likely superfluous.
+
+        def b(service, member):  # bind lexically by shadowing
+            def _inner():
+                self.remove_subscription(service, member)
+                msg = f"Cancelled D-Bus subscription for {member!r}"
+                self.module.put_issuer(msg)
+                callback()
+            return _inner
+
+        for service, member in pairs:
+            if not self.check_subscription(service, member):
+                continue
+            self._subscribe(service, member, b(service, member), remove=True)
 
     def subscribe_incoming(self):
         """Register handler for incoming Signal messages"""
@@ -211,8 +249,9 @@ class DBusConnection(znc.Socket):
         if self.debug:
             self.logger.debug("Adding match rule for 'MessageReceived'")
         try:
-            self.module.do_subscribe("Signal", "MessageReceived",
-                                     add_message_received_cb)
+            self._subscribe(
+                "Signal", "MessageReceived", add_message_received_cb
+            )
         except Exception:
             self.module.print_traceback()
 
@@ -235,9 +274,9 @@ class DBusConnection(znc.Socket):
                 assert all(type(s) is str for s in msg_body)
             if msg_body[0] == service_name:
                 self.remove_subscription("DBus", member)
-                self.module.do_subscribe("DBus", member,
-                                         remove_name_owner_changed_cb,
-                                         remove=True)
+                self._subscribe(
+                    "DBus", member, remove_name_owner_changed_cb, remove=True
+                )
         #
         def remove_name_owner_changed_cb():  # noqa: E306
             if self.debug:
@@ -259,12 +298,10 @@ class DBusConnection(znc.Socket):
                 self.subscribe_incoming()
             else:
                 self.put_issuer("Waiting for Signal service...")
-                self.module.do_subscribe("DBus", member,
-                                         add_name_owner_changed_cb)
+                self._subscribe("DBus", member, add_name_owner_changed_cb)
         #
         wrapped = self.module.make_generic_callback(name_has_owner_cb)
-        self.module.do_send("DBus", "NameHasOwner", wrapped,
-                            args=(service_name,))
+        self._send("DBus", "NameHasOwner", wrapped, args=(service_name,))
 
     def _open_session(self):
         bus = OldProxy(get_msggen("DBus"), self)
@@ -410,22 +447,6 @@ class AnonAuthenticator(Authenticator):
                 return make_auth_anonymous(), ClientState.WaitingForReject
             self.error = line
         return super().process_line(line)
-
-
-class FakeFuture(_Future):
-
-    def __init__(self):
-        super().__init__()
-        self._callbacks = []
-
-    def set_result(self, result):
-        self._result = (True, result)
-        for callback, _ in self._callbacks:
-            callback(self)
-        self._callbacks.clear()
-
-    def add_done_callback(self, fn, *, context=None):
-        self._callbacks.append((fn, context))
 
 
 class OldProxy(Proxy):

@@ -1124,23 +1124,9 @@ class Signal(znc.Module):
                 self.logger.debug("Removed latent connection object")
             del self._connection
             return
-        # It seems like the system bus normally removes match rules when their
-        # owner disconnects, so this is likely superfluous.
-        #
-        def resume_disconnect_cb():  # noqa: E306
-            self._connection.remove_subscription(service_name, member)
-            msg = f"Cancelled D-Bus subscription for {member!r}"
-            self._connection.put_issuer(msg)
-            self.cmd_disconnect()
-        #
-        # XXX "await" point: "RemoveMatch" callbacks must remove subscriptions
-        # from the connection's router or this will loop forever
-        for service_name, member in (("DBus", "NameOwnerChanged"),
-                                     ("Signal", "MessageReceived")):
-            if self._connection.check_subscription(service_name, member):
-                return self.do_subscribe(service_name, member,
-                                         resume_disconnect_cb,
-                                         remove=True)
+
+        self._connection._cancel_subscriptions(self.cmd_disconnect)
+
         try:
             self._connection.Close()
         except Exception:
