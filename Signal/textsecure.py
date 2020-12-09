@@ -1,7 +1,10 @@
 # This file is part of ZNC-Signal <https://github.com/poppyschmo/znc-signal>,
 # licensed under Apache 2.0 <http://www.apache.org/licenses/LICENSE-2.0>.
 
+from typing import Optional
+
 from . import znc
+from . import degustibus
 
 
 class Signal(znc.Module):
@@ -19,6 +22,8 @@ class Signal(znc.Module):
     last_config_selector = None     # str, used by cmd_update, cmd_select
     approx = None               # cmdopts.AllParsed ~> argparse.ArgumentParser
     mod_commands = None         # dict, {cmd_<name> : method, ...}
+
+    _connection: Optional[degustibus.DBusConnection] = None
     #
     from .commonweal import znc_version
 
@@ -182,10 +187,10 @@ class Signal(znc.Module):
         if not template["recipients"]:
             msg = ("Push aborted; reason: /templates/{}/recipients is empty"
                    .format(noneso["template"]))
-        if not hasattr(self, "_connection") or self._connection.IsClosed():
+        if not self._connection or self._connection.IsClosed():
             msg = ("Push aborted; reason: no connection to {!r}"
                    .format(self.config.settings.get("host", "null")))
-        if hasattr(self, "_connection") and not self._connection.has_service:
+        if self._connection and not self._connection.has_service:
             msg = ("Push aborted; reason: Waiting for signal service")
         if msg:
             if self.debug:
@@ -1086,7 +1091,6 @@ class Signal(znc.Module):
 
     def cmd_connect(self, address=None, host=None, port=None, bindhost=None):
         # TODO remove bindhost option; we're not listening for requests
-        from .degustibus import get_tcp_address, DBusConnection
         #
         if address is None:
             if host is None:  # Port defaults to 47000
@@ -1095,20 +1099,25 @@ class Signal(znc.Module):
                 raise self.approx._construct_error("connect", "host", msg)
             address = "tcp:host={host},port={port}".format(host=host,
                                                            port=port)
-        bus_addr = get_tcp_address(address)
+        bus_addr = degustibus.get_tcp_address(address)
         if self.debug:
             self.logger.debug("Bus address: {}".format(bus_addr))
         if not isinstance(bus_addr, tuple):
             # Only triggered in debug mode if address is invalid
             return self.cmd_help("connect")
-        elif (hasattr(self, "_connection") and
-                not self._connection.IsClosed() and
-                self._connection.bus_addr == bus_addr):
+        elif (
+            self._connection and
+            not self._connection.IsClosed() and
+            self._connection.bus_addr == bus_addr
+        ):
             self.put_pretty(f"Already connected to {bus_addr}")
             return
         issuer = self.GetClient().GetFullName()
-        self._connection = self.CreateSocket(DBusConnection, bus_addr=bus_addr,
-                                             issuing_client=issuer)
+        self._connection = self.CreateSocket(
+            degustibus.DBusConnection,
+            bus_addr=bus_addr,
+            issuing_client=issuer
+        )
         host, port = bus_addr
         kwargs = dict(host=host, port=port)
         if bindhost is not None:
@@ -1116,13 +1125,13 @@ class Signal(znc.Module):
         self._connection.Connect(**kwargs)
 
     def cmd_disconnect(self):
-        if not hasattr(self, "_connection"):
+        if not self._connection:
             self.put_pretty("No existing connection")
             return
         elif self._connection.IsClosed():
             if self.debug:
                 self.logger.debug("Removed latent connection object")
-            del self._connection
+            self._connection = None
             return
 
         self._connection._cancel_subscriptions(self.cmd_disconnect)
@@ -1135,7 +1144,7 @@ class Signal(znc.Module):
         else:
             if not self._connection.IsClosed():
                 raise ConnectionError("Could not close %r" % self._connection)
-            del self._connection
+            self._connection = None
 
     def cmd_debug_send(self, node, method, raw_string=None, as_json=False):
         """This is for DBUS calls (not IRC commands)
