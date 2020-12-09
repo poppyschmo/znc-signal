@@ -654,44 +654,7 @@ class Signal(znc.Module):
            /blob/925d8db468ce39c0e2b164cc1ab464ea2edf4e86
            /src/main/java/org/asamk/Signal.java#L32
         """
-        try:
-            # Caller must ensure connection is actually up; this doesn't check
-            assert self._connection.unique_name is not None, "Not connected"
-        except AttributeError as exc:
-            raise AssertionError from exc
-        from jeepney.bus_messages import MatchRule  # type: ignore[import]
-        from .jeepers import get_msggen
-        service = get_msggen(node)
-        match_rule = MatchRule(type="signal",
-                               sender=service.bus_name,
-                               interface=service.interface,
-                               member=member,
-                               path=service.object_path)
-        #
-        def request_cb(fut):  # noqa E306
-            result = fut.result()
-            msg = []
-            if result != ():
-                msg.append("Problem with subscription request")
-            elif not hasattr(self, "_connection"):
-                msg.append("Connection missing")
-            elif self._connection.IsClosed():
-                msg.append("Connection unexpectedly closed")
-            if msg:
-                msg.extend(["remove: {remove!r}",
-                            "member: {member!r}",
-                            "result: {result!r}"])
-                try:
-                    raise RuntimeError("; ".join(msg))
-                except RuntimeError:
-                    self.print_traceback()
-                return None
-            # Confusing: see cmd_disconnect below for reason (callback hell)
-            if callable(callback):
-                return callback()
-        #
-        method = "AddMatch" if remove is False else "RemoveMatch"
-        return self.do_send("DBus", method, request_cb, args=[match_rule])
+        return self._connection._subscribe(node, member, callback, remove)
 
     def do_send(self, node, method, callback, args=None):
         r"""Call a method on a D-Bus object

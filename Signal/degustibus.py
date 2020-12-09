@@ -17,6 +17,7 @@ from jeepney.io.blocking import Proxy, _Future  # type: ignore[import]
 from jeepney.io.common import (  # type: ignore[import]
     MessageFilters, FilterHandle,
 )
+from jeepney.bus_messages import MatchRule  # type: ignore[import]
 
 from typing import Tuple, Optional, Callable, Iterable
 
@@ -131,7 +132,52 @@ class DBusConnection(znc.Socket):
 
     _send = send_dbus_message
 
-    _send = dbus_send
+    def _subscribe(
+        self,
+        node: str,
+        member: str,
+        callback: Optional[Callable[[], None]] = None,
+        remove: bool = False
+    ) -> None:
+        """Register or remove a match rule."""
+        try:
+            # Caller must ensure connection is actually up; this doesn't check
+            assert self.unique_name is not None, "Not connected"
+        except AttributeError as exc:
+            raise AssertionError from exc
+        service = get_msggen(node)
+        match_rule = MatchRule(
+            type="signal",
+            sender=service.bus_name,
+            interface=service.interface,
+            member=member,
+            path=service.object_path
+        )
+        #
+        def request_cb(fut):  # noqa E306
+            result = fut.result()
+            msg = []
+            if result != ():
+                msg.append("Problem with subscription request")
+            elif not hasattr(self.module, "_connection"):
+                msg.append("Connection missing")
+            elif self.IsClosed():
+                msg.append("Connection unexpectedly closed")
+            if msg:
+                msg.extend([f"remove: {remove!r}",
+                            f"member: {member!r}",
+                            f"result: {result!r}"])
+                try:
+                    raise RuntimeError("; ".join(msg))
+                except RuntimeError:
+                    self.module.print_traceback()
+                return None
+            # Confusing: see _disconnect below for reason (callback hell)
+            if callable(callback):
+                return callback()
+        #
+        method = "AddMatch" if remove is False else "RemoveMatch"
+        self._send("DBus", method, request_cb, args=[match_rule])
 
     def subscribe_incoming(self):
         """Register handler for incoming Signal messages"""
