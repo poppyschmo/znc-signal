@@ -49,7 +49,7 @@ def send_dbus_message(
 default_subs = (("DBus", "NameOwnerChanged"), ("Signal", "MessageReceived"))
 
 
-class FakeFuture(_Future):
+class Future(_Future):
 
     def __init__(self):
         super().__init__()
@@ -87,11 +87,11 @@ class DBusConnection(znc.Socket):
         #
         self._filters = MessageFilters()
         self.router = Router(
-            handle_factory=FakeFuture,
+            handle_factory=Future,
             on_unhandled=self.on_unhandled if self.debug else None,
         )
 
-        self.authentication = FakeFuture()
+        self.authentication = Future()
         # FIXME explain why this appears twice (see above)
         self.unique_name = None
 
