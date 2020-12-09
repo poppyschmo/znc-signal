@@ -201,13 +201,15 @@ class Signal(znc.Module):
             recipients = template["recipients"]
         #
         def callback(result, message):  # noqa: E306
-            if result:
-                info = dict(message=message, result=result)
-                msg = f"Problem sending message:\n  {info!r}"
-            else:
+            if isinstance(result, int) and (1500000000 < result < 3000000000):
                 if len(message) > 52:
                     message = "{}...".format(message[:49])
-                msg = "SENT: {!r}".format(message)
+                import datetime
+                ts = datetime.datetime.fromtimestamp(result)
+                msg = "[{!s}] SENT: {!r}".format(ts, message)
+            else:
+                info = dict(message=message, result=result)
+                msg = f"Problem sending message:\n  {info!r}"
             if self.debug:
                 self.logger.debug(msg)
             else:
