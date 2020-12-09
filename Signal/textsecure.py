@@ -614,12 +614,11 @@ class Signal(znc.Module):
 
     def make_generic_callback(self, real_callback, *args, **kwargs):
         "Make a callback for normal D-Bus methods (not signals)"
+        from .degustibus import unsolo_result
+
         def generic_callback(fut):
             try:
-                result = fut.result()
-                if result != ():
-                    result = result[0]
-                real_callback(result, *args, **kwargs)
+                real_callback(unsolo_result(fut.result()), *args, **kwargs)
             except Exception:
                 self.print_traceback()  # <- ``fut.exception``, if set
 
@@ -693,7 +692,7 @@ class Signal(znc.Module):
                     org.freedesktop.DBus.Debug.Stats.GetAllMatchRules
 
         """
-        self._connection._send(node, method, callback, args)
+        self._connection.send_external(node, method, callback, args)
 
     def manage_config(self, action=None, peel=False, force=False,
                       as_json=False, path=None):
