@@ -5,7 +5,13 @@ import re
 from types import MappingProxyType
 from typing import Union, List
 from collections.abc import MutableMapping, MutableSequence
-from functools import lru_cache, cache
+from functools import lru_cache
+
+try:
+    from functools import cache
+except ImportError:
+    def cache(user_function):
+        return lru_cache(maxsize=None)(user_function)
 
 bound_pat = re.compile("^(?P<left>\\W)?.*?(?P<right>\\W)?$")
 get_regex = cache(re.compile)
