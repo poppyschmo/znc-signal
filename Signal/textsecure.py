@@ -378,9 +378,12 @@ class Signal(znc.Module):
                            "; setting to %r, but will not rotate/truncate; "
                            "Consider a pty instead\x02" % self.logfile)
             get_logger.configure(open(self.logfile, "w"))
+        else:
+            get_logger.configure(None, "WARNING")
         self.logger = get_logger(self.__class__.__name__)
-        if not self.debug:
-            self.logger.setLevel("WARNING")
+        if self.debug:
+            import logging
+            assert self.logger.level <= logging._checkLevel("DEBUG")
         # This and the logger call in OnShutdown are the only unguarded ones
         self.logger.debug("loaded, logging with: %r" % self.logger)
         #

@@ -230,23 +230,23 @@ if not hasattr(_znc, "IS_MOCK"):
 
 
 class SignalStub(Signal):
-    _using_debug = False
     _network = "dummynet"           # CClient.GetFullName
     _user = "testdummy"             # CUser.GetUserName
     _nick = "dummy"                 # CUser.GetNick
     _client_ident = "dummyclient"   # CClient.GetFullName
-    _argstring = ""
     _buffer = None
     _buffer_pos = 0
 
-    def __init__(self):
-        if not self._using_debug:
-            from functools import partialmethod
-            self.print_traceback = partialmethod(Signal.print_traceback,
-                                                 where="PutTest")
+    def __init__(self, argstr):
+        debug = "DEBUG=1" in argstr
+        if not debug:
+            from functools import partial
+            self.print_traceback = partial(
+                self.print_traceback, where="PutTest"
+            )
         from znc import String, ModuleNV
         self.nv = ModuleNV()
-        self.OnLoad(self._argstring, String(""))
+        self.OnLoad(argstr, String(""))
 
     def put_pretty(self, lines, where="PutTest"):
         # Can't partialize because calls from ``print_traceback`` would
@@ -281,9 +281,7 @@ class SignalStub(Signal):
 @pytest.fixture
 def signal_stub():
     import os
-    SignalStub._argstring = f"DATADIR={os.devnull}"
-    stub = SignalStub()
-    SignalStub._argstring = ""
+    stub = SignalStub(f"DATADIR={os.devnull}")
     yield stub
     if stub._buffer is not None:
         stub._buffer.close()
@@ -291,17 +289,12 @@ def signal_stub():
 
 @pytest.fixture
 def signal_stub_debug(tmpdir, monkeypatch):
-    import os
     #
     def gsp(self):  # noqa: E306
         return str(tmpdir)
     #
     monkeypatch.setattr(_znc.Module, "GetSavePath", gsp)
-    SignalStub._using_debug = True
-    os.environ["SIGNALMOD_DEBUG"] = "1"
-    stub = SignalStub()
-    SignalStub._using_debug = False
-    del os.environ["SIGNALMOD_DEBUG"]
+    stub = SignalStub("DEBUG=1")
     yield stub
     stub.OnShutdown()
     if stub._buffer is not None:

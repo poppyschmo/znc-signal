@@ -14,12 +14,10 @@ def env_stub(signal_stub):
     import os
     os.environ["SIGNALMOD_FAKE"] = "fake_val"
     os.environ["SIGNALMOD_FOO"] = "foo_val"
-    signal_stub.__class__._argstring = \
-        f"DATADIR={os.devnull} FOO=someval UNKNOWN=ignored"
+    argstring = f"DATADIR={os.devnull} FOO=someval UNKNOWN=ignored"
     signal_stub.__class__.foo = None
     signal_stub.__class__.fake = None
-    env_stub = signal_stub.__class__()
-    signal_stub.__class__._argstring = ""
+    env_stub = signal_stub.__class__(argstring)
     yield env_stub
     del signal_stub.__class__.foo
     del signal_stub.__class__.fake

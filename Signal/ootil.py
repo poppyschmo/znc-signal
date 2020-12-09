@@ -53,6 +53,12 @@ OrderedRepr = ordered_reprlib.Repr
 _logger_fmt = (
     "{dark}[%(asctime)s]{norm} {dim}%(name)s.%(funcName)s:{norm} %(message)s"
 )
+_escapes = {
+    "dark": "\x1b[38;5;241m",
+    "dim": "\x1b[38;5;247m",
+    "norm": "\x1b[m",
+}
+LEVEL = "DEBUG"
 
 
 # FIXME wtf is all this nonsense? honestly.
@@ -63,28 +69,18 @@ class GetLogger:
     only reliably enabled when the asyncio module has already been
     imported into the calling namespace (before calling this func)
     """
-    LEVEL = "DEBUG"
-    LOGFILE = None
-    handler_name_fmt = "{name} (DEBUG)"
-    handler_name = None
-    _escapes = {
-        "dark": "\x1b[38;5;241m",
-        "dim": "\x1b[38;5;247m",
-        "norm": "\x1b[m",
-    }
+    logfile = None
 
-    def __init__(self, level=None, logfile=None, handler_name=None, loop=None):
-        self.LOGFILE = logfile
-        self.LEVEL = level or self.LEVEL
-        self.handler_name = handler_name
+    def __init__(self):  # Just reset
+        self.logfile = None
         self._handler = None
         self._formatter = None
 
     def get_formatter(self):
         if self._formatter is not None:
             return self._formatter
-        tty = self.LOGFILE and self.LOGFILE.isatty()
-        escapes = self._escapes if tty else dict(dark="", dim="", norm="")
+        tty = self.logfile and self.logfile.isatty()
+        escapes = _escapes if tty else dict(dark="", dim="", norm="")
         self._formatter = logging.Formatter(_logger_fmt.format(**escapes))
         return self._formatter
 
@@ -92,35 +88,31 @@ class GetLogger:
         if self._handler is not None:
             self.block_till_ready()
             return self._handler
-        if self.LOGFILE.isatty():
-            self._handler = logging.StreamHandler(stream=self.LOGFILE)
+        if self.logfile.isatty():
+            self._handler = logging.StreamHandler(stream=self.logfile)
         else:
-            self.LOGFILE.close()
-            self._handler = logging.FileHandler(self.LOGFILE.name)
-            self.LOGFILE = self._handler.stream
-        self._handler.set_name(self.handler_name)
-        # self._handler.setLevel(self.LEVEL)
+            self.logfile.close()
+            self._handler = logging.FileHandler(self.logfile.name)
+            self.logfile = self._handler.stream
+        handler_name = "{} ({})".format(self.logfile.name, LEVEL)
+        self._handler.set_name(handler_name)
         self._handler.setFormatter(self.get_formatter())
         self.block_till_ready()
         return self._handler
 
-    def configure(self, file, level=None):
-        self.LOGFILE = file
-        if level is not None:
-            if isinstance(level, int):
-                level = logging.getLevelName(level)
-            assert hasattr(logging, level)
-        else:
-            level = self.LEVEL
+    def configure(self, file, level=LEVEL):
+        global LEVEL
+        LEVEL = level
+        if isinstance(level, int):
+            level = logging.getLevelName(level)
+        assert hasattr(logging, level)
 
-        self.handler_name = self.handler_name_fmt.format(
-            name=self.LOGFILE.name
-        )
-
+        self.logfile = file
         logging.root.handlers.clear()
         logging.basicConfig(
             level=level,
-            handlers=[self.get_handler()]
+            handlers=[self.get_handler()] if file else [],
+            force=True,
         )
 
     def __call__(self, name, level=None):
@@ -134,8 +126,6 @@ class GetLogger:
     # FIXME remove this at call sites
     def clear(self):
         """Sequence to close handler and remove local reference"""
-        if not self.handler_name:
-            return
         logging._acquireLock()
         try:
             logging.root.handlers.clear()
@@ -147,8 +137,8 @@ class GetLogger:
                 if hasattr(self._handler.stream, "flush"):
                     self._handler.stream.flush()
                 self._handler.stream.close()
-            if not self.LOGFILE.closed:
-                raise RuntimeError(f"Could not close {self.LOGFILE}")
+            if self.logfile and not self.logfile.closed:
+                raise RuntimeError(f"Could not close {self.logfile}")
             self.__init__()
         finally:
             logging._releaseLock()
@@ -157,7 +147,7 @@ class GetLogger:
         # TODO ensure this still applies; this was moved from the main init
         # hook, but may no longer make sense. Formerly observed behavior:
         #
-        #   The first few writes to LOGFILE are blackholed when reloading
+        #   The first few writes to logfile are blackholed when reloading
         #   (unless modpython is also reloaded). This seems to force its hand
         #   (at least on Linux w. ZNC 1.6.6).
         #
@@ -184,7 +174,7 @@ class GetLogger:
                 if select.POLLOUT & event:
                     return
             maxtries -= 1
-        raise RuntimeError(f"Timed out waiting for I/O on {self.LOGFILE!r}")
+        raise RuntimeError(f"Timed out waiting for I/O on {self.logfile!r}")
 
 
 def get_tz():
