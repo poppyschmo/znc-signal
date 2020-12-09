@@ -7,12 +7,16 @@ import logging
 import reprlib
 from importlib.util import module_from_spec
 
+assert pprint.__spec__
+assert pprint.__loader__
 ordered_pprint = module_from_spec(pprint.__spec__)
-pprint.__loader__.exec_module(ordered_pprint)
+pprint.__loader__.exec_module(ordered_pprint)  # type: ignore[attr-defined]
 sys.modules["ordered_pprint"] = ordered_pprint
 
+assert reprlib.__spec__
+assert reprlib.__loader__
 ordered_reprlib = module_from_spec(reprlib.__spec__)
-reprlib.__loader__.exec_module(ordered_reprlib)
+reprlib.__loader__.exec_module(ordered_reprlib)  # type: ignore[attr-defined]
 sys.modules["ordered_reprlib"] = ordered_reprlib
 
 
@@ -43,10 +47,10 @@ def _possibly_sorted(x):
     return list(x)
 
 
-ordered_pprint._safe_tuple = _safe_tuple
+ordered_pprint._safe_tuple = _safe_tuple  # type: ignore[attr-defined]
 OrderedPrettyPrinter = ordered_pprint.PrettyPrinter
 
-ordered_reprlib._possibly_sorted = _possibly_sorted
+ordered_reprlib._possibly_sorted = _possibly_sorted  # type: ignore[attr-defined]  # noqa: E501
 OrderedRepr = ordered_reprlib.Repr
 
 
