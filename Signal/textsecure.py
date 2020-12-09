@@ -1,10 +1,13 @@
 # This file is part of ZNC-Signal <https://github.com/poppyschmo/znc-signal>,
 # licensed under Apache 2.0 <http://www.apache.org/licenses/LICENSE-2.0>.
 
-from typing import Optional
+import logging
+
+from typing import Optional, Dict, Any, List, Tuple
 
 from . import znc
 from . import degustibus
+from . import configgers
 
 
 class Signal(znc.Module):
@@ -15,9 +18,9 @@ class Signal(znc.Module):
     logfile = None      # str, $LOGFILE, get_logger.LOGFILE is file-like obj
     datadir = None      # str, $DATADIR or path from CModule::GetSavePath()
     tz = None           # datetime.timezone
-    config = None       # config_NT, members are BaseConfigDict subclasses
+    config: Optional[configgers.config_NT] = None
     debug = False
-    logger = None                   # logging.Logger, for this CModule object
+    logger: logging.Logger          # logging.Logger, for this CModule object
     last_traceback = None           # traceback, used by print_traceback
     last_config_selector = None     # str, used by cmd_update, cmd_select
     approx = None               # cmdopts.AllParsed ~> argparse.ArgumentParser
@@ -126,46 +129,57 @@ class Signal(znc.Module):
             return {n.GetName(): n for n in networks}
         return tuple(networks)
 
-    def route_verdict(self, name, relevant):
+    def _escape_focus(self, focus: str) -> Optional[str]:
+        from .ootil import unescape_unicode_char
+        try:
+            focus = unescape_unicode_char(focus)
+        except ValueError:
+            self.print_traceback()
+        else:
+            return focus
+        return None
+
+    def _format_message_route(self, name, rel_dict, template) -> str:
+        """Expand vars in ``/templates/*/format``
+
+        Valid expansions::
+            context, nick, hostmask, body, network
+        """
+        from collections import defaultdict
+        # TODO add length truncation; append full body onto deque buffer at
+        # _user_targets["backspool"]. User can retrieve (pop) later with: /last
+        # <context>; or just use CBuffer to handle this
+        #
+        msgfmt = template["format"]
+        msgfmt_args: Dict[str, Any] = defaultdict(str, **rel_dict)
+        #
+        if "{focus}" in msgfmt:
+            msgfmt_args["focus"] = ""
+        if (
+            hasattr(self, "_session")
+            and self._session["focus"]
+            and self._session["focus"] == msgfmt_args["context"]
+            (focus := self._escape_focus(template["focus_char"]))
+        ):
+            msgfmt_args["focus"] = focus
+
+        if "Action" in name:
+            msgfmt_args["body"] = " ".join(
+                ("*", msgfmt_args["nick"], msgfmt_args["body"])
+            )
+        elif "CTCP" in name:
+            msgfmt_args["body"] = msgfmt_args["body"].replace(
+                "ACTION", f"*{msgfmt_args['nick']}", 1
+            )
+        return msgfmt.format(**msgfmt_args)
+
+    def route_verdict(self, name, relevant: Dict[str, Any]):
         """Prepare and send outgoing ZNC-to-Signal messages"""
         from collections import defaultdict
-        #
-        def format_message(rel_dict, template):  # noqa: E306
-            """Expand vars in ``/templates/*/format``
-
-            Valid expansions::
-                context, nick, hostmask, body, network
-            """
-            # TODO add length truncation; append full body onto deque buffer at
-            # _user_targets["backspool"]. User can retrieve (pop) later with:
-            # /last <context>; or just use CBuffer to handle this
-            #
-            msgfmt = template["format"]
-            msgfmt_args = defaultdict(str, **rel_dict)
-            #
-            if "{focus}" in msgfmt:
-                msgfmt_args["focus"] = ""
-            if (hasattr(self, "_session") and self._session["focus"] and
-                    self._session["focus"] == msgfmt_args["context"]):
-                from .ootil import unescape_unicode_char
-                try:
-                    focus = unescape_unicode_char(template["focus_char"])
-                except ValueError:
-                    self.print_traceback()
-                else:
-                    msgfmt_args["focus"] = focus
-            #
-            if "Action" in name:
-                msgfmt_args["body"] = " ".join(("*", msgfmt_args["nick"],
-                                                msgfmt_args["body"]))
-            elif "CTCP" in name:
-                msgfmt_args["body"] = msgfmt_args["body"].replace(
-                    "ACTION", f"*{msgfmt_args['nick']}", 1
-                )
-            return msgfmt.format(**msgfmt_args)
+        assert self.config
         #
         # TODO move this to a test
-        if self.debug and self.config:
+        if self.debug:
             # Default must always run last
             assert list(self.config.conditions).pop() == "default"
             # Insertion ordering honors unsaved modifications
@@ -182,7 +196,7 @@ class Signal(znc.Module):
             return
         #
         template = self.config.templates[noneso["template"]]
-        message = format_message(noneso, template)
+        message = self._format_message_route(name, noneso, template)
         msg = None
         if not template["recipients"]:
             msg = ("Push aborted; reason: /templates/{}/recipients is empty"
@@ -223,7 +237,7 @@ class Signal(znc.Module):
                 self.put_pretty(msg)
         #
         cb = self.make_generic_callback(callback, message)
-        payload = (message, [], recipients)
+        payload: Tuple[str, List, List[str]] = (message, [], recipients)
         self.do_send("Signal", "sendMessage", cb, payload)
 
     def get_relevant(self, msg):
