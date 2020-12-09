@@ -5,10 +5,7 @@ from . import znc
 from . import get_logger
 from .jeepers import Incoming, get_msggen
 
-from asyncio.base_events import BaseEventLoop
-from asyncio.futures import Future as AsyncFuture
-
-from jeepney import MessageType  # type: ignore[import]
+from collections import deque
 
 from jeepney.auth import (  # type: ignore[import]
     Authenticator, ClientState, make_auth_anonymous,
@@ -16,9 +13,12 @@ from jeepney.auth import (  # type: ignore[import]
 from jeepney.bus import parse_addresses  # type: ignore[import]
 from jeepney.low_level import Parser  # type: ignore[import]
 from jeepney.routing import Router  # type: ignore[import]
-from jeepney.integrate.asyncio import Proxy  # type: ignore[import]
+from jeepney.io.blocking import Proxy, _Future  # type: ignore[import]
+from jeepney.io.common import (  # type: ignore[import]
+    MessageFilters, FilterHandle,
+)
 
-from typing import Tuple
+from typing import Tuple, Optional
 
 
 class DBusConnection(znc.Socket):
@@ -41,8 +41,7 @@ class DBusConnection(znc.Socket):
         self.auth_parser = AnonAuthenticator(self.debug)
         self.parser = Parser()
         #
-        FakeFuture.fake_loop = FakeLoop(self.module)
-        #
+        self._filters = MessageFilters()
         self.router = Router(
             handle_factory=FakeFuture,
             on_unhandled=self.on_unhandled if self.debug else None,
@@ -257,13 +256,16 @@ class DBusConnection(znc.Socket):
 
     def data_received_post_auth(self, data):
         if self.debug:
-            num_futs = len(self.router.awaiting_reply)
-            log_msg = [f"Futures awaiting reply: {num_futs}"]
+            log_msg = []
         for msg in self.parser.feed(data):
             self.router.incoming(msg)
+            # for filter in self._filters.matches(msg):
+            #     filter.queue.append(msg)
             if self.debug:
                 log_msg.append(self.format_debug_msg(msg))
         if self.debug:
+            num_futs = len(self.router.awaiting_reply)
+            log_msg = [f"Futures awaiting reply: {num_futs}"] + log_msg
             self.logger.debug("\n".join(log_msg))
 
     def send_message(self, message):
@@ -282,6 +284,15 @@ class DBusConnection(znc.Socket):
             self.logger.debug(f"Futures awaiting reply: {num_futs}\n{log_msg}")
         self.WriteBytes(data)
         return future
+
+    def send_and_get_reply(self, message, *, timeout=None, unwrap=None):
+        return self.send_message(message)
+
+    def filter(self, rule, *, queue: Optional[deque] = None, bufsize=1):
+        """See io.blocking.DBusConnection.filter"""
+        if queue is None:
+            queue = deque(maxlen=bufsize)
+        return FilterHandle(self._filters, rule, queue)
 
     def OnConnected(self):
         self.WriteBytes(self.auth_parser.data_to_send())
@@ -327,48 +338,24 @@ class AnonAuthenticator(Authenticator):
         return super().process_line(line)
 
 
-class FakeLoop(BaseEventLoop):
-    """Kludge for DBusConnection's incoming data dispatcher (router)
-
-    Obviously, this is pure mockery and not a real shim.
-    """
-    _current_handle = None
-    _exception_handler = None
-
-    def __init__(self, module):
-        self.module = module
-        super().__init__()
-
-    def call_soon(self, callback, *args, context=None):
-        return self.call_later(0, callback, *args, context=context)
-
-    def call_later(self, delay, callback, *args, context=None):
-        """This is actually ``call_soon``"""
-        assert delay == 0
-        callback(*args)
-
-    def get_debug(self):
-        return False
-
-
-class FakeFuture(AsyncFuture):
-    fake_loop = None
+class FakeFuture(_Future):
 
     def __init__(self):
-        assert self.fake_loop is not None
-        super().__init__(loop=self.fake_loop)
+        super().__init__()
+        self._callbacks = []
+
+    def set_result(self, result):
+        self._result = (True, result)
+        for callback, _ in self._callbacks:
+            callback(self)
+        self._callbacks.clear()
+
+    def add_done_callback(self, fn, *, context=None):
+        self._callbacks.append((fn, context))
 
 
 class OldProxy(Proxy):
-    _protocol: DBusConnection
-
-    def _method_call(self, make_msg):
-        def inner(*args, **kwargs):
-            msg = make_msg(*args, **kwargs)
-            assert msg.header.message_type is MessageType.method_call
-            return self._protocol.send_message(msg)
-
-        return inner
+    _connection: DBusConnection
 
 
 def get_tcp_address(addr):
