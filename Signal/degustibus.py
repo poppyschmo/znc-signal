@@ -6,6 +6,7 @@ from . import get_logger
 from .jeepers import incoming_NT, get_msggen
 
 from asyncio.events import AbstractEventLoop
+from asyncio.base_events import BaseEventLoop
 from asyncio.futures import Future as AsyncFuture
 
 from jeepney.auth import (SASLParser, BEGIN,
@@ -318,6 +319,9 @@ class FakeLoop(AbstractEventLoop):
 
     Obviously, this is pure mockery and not a real shim.
     """
+    _current_handle = None
+    _exception_handler = None
+
     def __init__(self, module):
         self.module = module
 
@@ -331,6 +335,8 @@ class FakeLoop(AbstractEventLoop):
 
     def get_debug(self):
         return False
+
+    call_exception_handler = BaseEventLoop.default_exception_handler
 
 
 class FakeFuture(AsyncFuture):
