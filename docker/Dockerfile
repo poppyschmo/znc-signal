@@ -1,11 +1,10 @@
 # This file is part of ZNC-Signal. See NOTICE for details.
 # License: Apache 2.0 <http://www.apache.org/licenses/LICENSE-2.0>
 
-FROM openjdk:16-jdk-alpine
-ENV SIGNAL_CLI_VERSION ${SIGNAL_CLI_VERSION:-0.6.11}
+FROM docker.io/library/openjdk:17-jdk-alpine
+ENV SIGNAL_CLI_VERSION ${SIGNAL_CLI_VERSION:-0.10.0}
 
-ARG signal_cli_home
-ENV SIGNAL_CLI_HOME ${signal_cli_home:-/var/lib/signal-cli}
+ENV SIGNAL_CLI_HOME /var/lib/signal-cli
 ENV SIGNAL_CLI_OPTS=-Xms2m
 
 ADD src/signal-cli-$SIGNAL_CLI_VERSION.tar.gz /opt/
@@ -49,7 +48,7 @@ RUN ( echo SIGNAL_CLI_VERSION=$SIGNAL_CLI_VERSION \
 		PATH=$PATH; \
 	echo export SIGNAL_CLI_VERSION SIGNAL_CLI_OPTS JAVA_HOME PATH; \
 	) >> /etc/profile.d/aliases.sh && \
-	mv /etc/profile.d/color_prompt /etc/profile.d/color_prompt.sh
+	mv /etc/profile.d/color_prompt.sh.disabled /etc/profile.d/color_prompt.sh
 
 COPY entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh && \

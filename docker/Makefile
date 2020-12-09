@@ -3,7 +3,7 @@
 # Note: changing this bunch via env vars only makes sense for inspection
 # purposes; they're hard-coded in the Dockerfile, (no ARG overrides)
 SRCDIR ?= src
-SIGCLI_REV ?= 0.6.11
+SIGCLI_REV ?= 0.10.0
 
 SIGCLI_PKG = signal-cli-$(SIGCLI_REV)
 SC_PKG_TAR = $(SIGCLI_PKG).tar.gz
